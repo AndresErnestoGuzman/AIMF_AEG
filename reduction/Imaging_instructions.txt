@@ -1,0 +1,74 @@
+---------------------------------------------------------------------------------------------
+
+					ALMA-IMF
+			Template scripts for continuum imaging
+
+	- scripts written by A. Ginsburg with minor modifications by T. Csengeri -
+    - instructions written by T. Csengeri, modified by A. Ginsburg,
+      additional notes are in the python scripts -
+
+12.12.2018: As of today, this has only been tested on B3 images.
+27.05.2019: A. Ginsburg made substantial modifications during & after f2f meeting in Grenoble
+---------------------------------------------------------------------------------------------
+
+0.) Set up your CASA environment:
+   - In your BASH terminal, the following, replacing the path to the reduction directory appropriately, i.e.,
+     with the folder that contains this file and `split_windows.py`:
+     $ export ALMAIMF_ROOTDIR=/path/to/the/directory/containing/this/file
+   - Start CASA
+   - Install astropy stuff.  Follow the instructions at http://docs.astropy.org/en/stable/install.html#installing-astropy-into-casa
+   - Install a little more python stuff:
+   >>> import subprocess
+   >>> subprocess.check_call([sys.executable, '-m', 'pip', 'install', '--user',
+                              'cython',
+                              'https://github.com/astropy/regions/archive/v0.4.tar.gz',
+                              'https://github.com/radio-astro-tools/spectral-cube/archive/master.zip'])
+   - Restart CASA
+
+1.) Run the pipeline with DOSPLIT=True to restore the measurement sets.  You can use this script:
+https://github.com/ALMA-IMF/reduction/blob/master/reduction/run_pipeline.py
+to automatically run all scriptForPI.py files in subdirectories.
+
+2.) Run split_windows.py (see instructions in that file) to create the continuum measurement sets.
+
+3.) Read https://github.com/ALMA-IMF/notebooks/blob/master/SelfCal_Instructions_Examination.ipynb,
+which goes into detail on how to image and create masks.
+
+4.) Modify ``imaging_parameters.py`` and submit the change as a pull request.
+    Most likely, you need to add the name of your target field (e.g., G008.67, W51-E, W43-MM2)
+    to the line saying "for field in ...".  DO NOT delete the other field names!
+
+5.) Run continuum_imaging.py:
+    - Set EXCLUDE_7M=True on the command line or ``exclude_7m=True`` within python if you do
+    not want to include the 7m data.
+    If and when it crashes because you do not have an appropriately named
+    region file, make a region file following the naming scheme given in
+    https://github.com/ALMA-IMF/notebooks/blob/master/SelfCal_Instructions_Examination.ipynb
+    (if you can't see that website on github, try loading it in http://nbviewer.jupyter.org)
+
+
+6.) Run continuum_imaging_selfcal.py
+    This file runs based off of the parameters set in the file https://github.com/ALMA-IMF/reduction/blob/master/reduction/imaging_parameters.py.
+    It requires that either ds9 or CASA CRTF region files specifying the masks are created as described in
+    https://github.com/ALMA-IMF/notebooks/blob/master/SelfCal_Instructions_Examination.ipynb
+
+
+
+Additional Details of the Directory Structure
+=============================================
+There are two directory structures to pay attention to: the code tree and the
+data tree.
+
+The data tree will be wherever you download the ALMA data and extract the tar
+files; it must be on a file system with a lot of free space.  When you extract
+the tar files, a directory called "2017.1.01355.L" will be created: that is
+where you should run the various scripts described here.  When you run the
+imaging scripts, a subdirectory called "imaging_results/" will be created, and
+that will contain all of the resulting image files.
+
+The code tree can go anywhere.  The ALMAIMF_ROOTDIR environmental variable,
+described above, should point to the "reduction/" directory that contains all
+of the important scripts (i.e., this directory:
+https://github.com/ALMA-IMF/reduction/tree/master/reduction).
+
+When you create mask region files, they belong in $ALMAIMF_ROOTDIR/clean_regions/.
