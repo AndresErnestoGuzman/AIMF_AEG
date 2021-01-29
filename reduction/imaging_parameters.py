@@ -131,7 +131,19 @@ for key in imaging_parameters_nondefault:
         assert key in imaging_parameters, "key {0} was not in imaging_parameters".format(key)
     imaging_parameters[key].update(imaging_parameters_nondefault[key])
 
-
+# Default sigma calculation for threshold
+images_for_sigma_estimation = glob.glob("imaging_results/*0.image.tt0.fits")
+for i in images_for_sigma_estimation:
+    (path,filename) = os.path.split(i)
+    auxiliar = filename.split('_')
+    field = auxiliar.pop(0)
+    band = auxiliar.pop(0)
+    array = auxiliar.pop(0)
+    robust_value = re.sub('robust([^\.]+).*','\\1',auxiliar.pop(0))
+    key = "{0}_{1}_{2}_robust{3}".format(field, band, array, robust_value)
+    if not 'threshold' in imaging_parameters[key]:
+        rms = float(subprocess.check_output(['gethead','RMS',i]))
+        imaging_parameters[key]['threshold'] = {0:"{0:.2f}mJy".format(rms*1000*2)}
 
 """
 Self-calibration parameters are defined here

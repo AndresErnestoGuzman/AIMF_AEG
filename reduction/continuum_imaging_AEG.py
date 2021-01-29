@@ -20,11 +20,19 @@ You can set the following environmental variables for this script:
 
 The environmental variable ``ALMAIMF_ROOTDIR`` should be set to the directory
 containing this file.
+
+
+Additional Notes
+================
+USE_SELFCAL_MS is an environmental variable you can set if you want the imaging
+to be done using the selfcal.ms file instead of the default continuum MS file.
+It is primarily for debug purposes and you shouldn't need it.
 """
 
 onlyDirtyImaging = False
 
 import os, sys, argparse, re, glob, copy
+from subprocess import check_output
 
 try:
     # If run from command line
@@ -62,20 +70,7 @@ from metadata_tools import determine_imsize, determine_phasecenter, logprint, js
 #from make_custom_mask import make_custom_mask
 
 from imaging_parameters import imaging_parameters
-# Default sigma calculation for threshold
-images_for_sigma_estimation = glob.glob("imaging_results/*dirty.image.tt0")
-for i in images_for_sigma_estimation:
-    (path,filename) = os.path.split(i)
-    auxiliar = filename.split('_')
-    field = auxiliar.pop(0)
-    band = auxiliar.pop(0)
-    array = auxiliar.pop(0)
-    robust_value = re.sub('robust([^\.]+).*','\\1',auxiliar.pop(0))
-    key = "{0}_{1}_{2}_robust{3}".format(field, band, array, robust_value)
-    if not 'threshold' in imaging_parameters[key]:
-        stats = imstat(i)
-        ss = 1.4826*stats['medabsdevmed'][0]
-        imaging_parameters[key]['threshold'] = {0: "{0:.2f}mJy".format(1000*2*ss)}
+
 
 
 from tasks import tclean, exportfits, plotms, split
@@ -147,11 +142,7 @@ elif only_7m:
 else:
     arrayname = '7M12M'
 
-""" 
-Populate dictionaries 
-	continuum_files_per_field : The keys are the fields. Each field associated with a list of continuum ms files
-	vis_image_parameters : best image parameters per visibility file
-"""
+
 continuum_files_per_field = {}
 vis_image_parameters = {}
 bands = set()
@@ -203,7 +194,7 @@ for continuum_ms in continuum_mses:
     vis_image_parameters[continuum_ms]['7M12M_antennae'] = ""
     msmd.close()
 
-# Determine best image parameters per field. You need to check all image parameters of each continuum file containing the field.
+
 field_image_parameters = {}
 bands  = continuum_files_per_field.keys()
 for band in bands:
