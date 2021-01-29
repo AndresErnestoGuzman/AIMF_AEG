@@ -20,13 +20,6 @@ You can set the following environmental variables for this script:
 
 The environmental variable ``ALMAIMF_ROOTDIR`` should be set to the directory
 containing this file.
-
-
-Additional Notes
-================
-USE_SELFCAL_MS is an environmental variable you can set if you want the imaging
-to be done using the selfcal.ms file instead of the default continuum MS file.
-It is primarily for debug purposes and you shouldn't need it.
 """
 
 onlyDirtyImaging = False
@@ -154,7 +147,11 @@ elif only_7m:
 else:
     arrayname = '7M12M'
 
-
+""" 
+Populate dictionaries 
+	continuum_files_per_field : The keys are the fields. Each field associated with a list of continuum ms files
+	vis_image_parameters : best image parameters per visibility file
+"""
 continuum_files_per_field = {}
 vis_image_parameters = {}
 bands = set()
@@ -206,7 +203,7 @@ for continuum_ms in continuum_mses:
     vis_image_parameters[continuum_ms]['7M12M_antennae'] = ""
     msmd.close()
 
-
+# Determine best image parameters per field. You need to check all image parameters of each continuum file containing the field.
 field_image_parameters = {}
 bands  = continuum_files_per_field.keys()
 for band in bands:
