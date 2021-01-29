@@ -5,6 +5,7 @@ from taskinit import casalog
 from taskinit import msmdtool
 from taskinit import mstool, tbtool
 from tasks import split, flagmanager, flagdata, rmtables, concat
+from parse_contdotdat import parse_contdotdat, contchannels_to_linechannels # noqa: E402
 
 if 'almaimf_rootdir' in locals():
     os.environ['ALMAIMF_ROOTDIR'] = almaimf_rootdir

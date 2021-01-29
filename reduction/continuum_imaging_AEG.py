@@ -1,6 +1,6 @@
 """
 Continuum imaging scripts.  There must be a ``continuum_mses.txt`` file in the
-directory this is run in.  That file is produced by ``split_windows.py``.
+directory this is run in.  That file is produced by ``split_windows.py``.impars
 
 You can set the following environmental variables for this script:
     EXCLUDE_7M=<boolean>
@@ -31,7 +31,7 @@ It is primarily for debug purposes and you shouldn't need it.
 
 onlyDirtyImaging = False
 
-import os, sys, argparse 
+import os, sys, argparse, re, glob, copy
 
 try:
     # If run from command line
@@ -67,12 +67,27 @@ almaimf_rootdir = os.getenv('ALMAIMF_ROOTDIR')
 from getversion import git_date, git_version
 from metadata_tools import determine_imsize, determine_phasecenter, logprint, json_load_byteified
 #from make_custom_mask import make_custom_mask
+
 from imaging_parameters import imaging_parameters
+# Default sigma calculation for threshold
+images_for_sigma_estimation = glob.glob("imaging_results/*dirty.image.tt0")
+for i in images_for_sigma_estimation:
+    (path,filename) = os.path.split(i)
+    auxiliar = filename.split('_')
+    field = auxiliar.pop(0)
+    band = auxiliar.pop(0)
+    array = auxiliar.pop(0)
+    robust_value = re.sub('robust([^\.]+).*','\\1',auxiliar.pop(0))
+    key = "{0}_{1}_{2}_robust{3}".format(field, band, array, robust_value)
+    if not 'threshold' in imaging_parameters[key]:
+        stats = imstat(i)
+        ss = 1.4826*stats['medabsdevmed'][0]
+        imaging_parameters[key]['threshold'] = {0: "{0:.2f}mJy".format(1000*2*ss)}
+
+
 from tasks import tclean, exportfits, plotms, split
 from taskinit import msmdtool, iatool
-import copy
 from utils import validate_mask_path
-import re
 
 if os.path.exists('metadata.json'):
     with open('metadata.json', 'r') as fh:
@@ -229,6 +244,8 @@ for band in bands:
             for robust in [0]:
                 key = "{0}_{1}_{2}_robust{3}".format(field, band,arrayname,robust)
                 impars = imaging_parameters[key]
+                #print impars
+                #sys.exit()
                 impars = copy.copy(impars)
                 dirty_impars = copy.copy(impars)
                 if 'maskname' in dirty_impars:
@@ -277,28 +294,7 @@ for band in bands:
                 if onlyDirtyImaging:
                     logprint("Ony dirty images this run.")
                     continue
-                # try:
-                #     if 'maskname' in locals() and os.path.exists(maskname):
-                #         pass
-                # except KeyError as ex:
-                #     if 'label' in str(ex):
-                #         logprint("Bad Region Exception: {0}".format(str(ex)))
-                #         raise KeyError("No text label was found in one of the regions."
-                #                        "  Regions must have text={xxJy} or {xxmJy} to "
-                #                        "indicate the threshold level")
-                # except IOError as ex:
-                #     if 'maskname' in locals() and os.path.exists(maskname):
-                #         logprint("Using mask: %s" % maskname)
-                #     else:
-                #         logprint("Exception: {0}".format(str(ex)))
-                #         logprint("Because no region file was found to create a mask, only "
-                #                  "the dirty image was made for {0}".format(imname))
-                #         if 'maskname' in dirty_impars:
-                #             logprint("However, mask {0} was found in image parameters.  "
-                #                      "Check that it exists".format(dirty_impars['maskname']))
-                #         continue
-                #         #raise ValueError("Make the region file first!")
-
+ 
                 if not 'maskname' in impars:
                     impars['usemask'] = 'pb'
                     maskname = ''
@@ -316,7 +312,7 @@ for band in bands:
                         if isinstance(val, dict):
                             impars_thisiter[key] = val[iteracion]
 
-                    if impars_thisiter['usemask'] == 'pb':
+                    if impars_thisiter['usemask'] == 'pb'and 'maskname' in impars_thisiter:
                         del impars_thisiter['maskname']
                     elif impars_thisiter['usemask'] == 'user':
                         if 'maskname' in impars_thisiter:

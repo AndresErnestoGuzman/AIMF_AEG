@@ -73,6 +73,9 @@ imaging_parameters = {
     for robust in [0]
 }
 
+
+
+
 # added for 7M only data: higher threshold
 for key in imaging_parameters:
     if "_7M_" in key:
@@ -82,8 +85,9 @@ for key in imaging_parameters:
 
 imaging_parameters_nondefault = {}
 
+
 if True:
-    mascaras = glob.glob("imaging_results/*bsens_robust0.image.tt0.fits")
+    mascaras = glob.glob("imaging_results/*_robust0.image.tt0.fits")
     #re.sub('.*(uid[^.]+).*','\\1',os.path.split(continuum_ms)[1])
     for mm in mascaras:
         (path,filename) = os.path.split(mm)
