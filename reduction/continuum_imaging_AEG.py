@@ -10,7 +10,7 @@ You can set the following environmental variables for this script:
         By default, the "best sensitivity" continuum images will also be made
         if the _bsens.ms measurement sets exist.  If you set DO_BSENS=False,
         they will be skipped instead.  "Best sensitivity" means that no spectral
-        lines are flagged out.
+        lines are flmsmdagged out.
     FIELD_ID=<name>
         If this parameter is set, filter out the imaging targets and only split
         fields with this name (e.g., "W43-MM1", "W51-E", etc.).
@@ -30,8 +30,9 @@ It is primarily for debug purposes and you shouldn't need it.
 """
 
 onlyDirtyImaging = False
+dryRun = True
 
-import os, sys, argparse, re, glob, copy
+import os, sys, argparse, re, glob, copy 
 from subprocess import check_output
 
 try:
@@ -57,8 +58,7 @@ if os.getenv('ALMAIMF_ROOTDIR') is None:
                          "specify ALMAIMF_ROOTDIR environment variable "
                          "or your PYTHONPATH variable to include the directory"
                          " containing the ALMAIMF code.")
-else:
-    import sys
+elif not os.getenv('ALMAIMF_ROOTDIR') in sys.path:
     sys.path.append(os.getenv('ALMAIMF_ROOTDIR'))
 
 almaimf_rootdir = os.getenv('ALMAIMF_ROOTDIR')
@@ -136,7 +136,7 @@ else:
 with open('continuum_mses.txt', 'r') as fh:
     continuum_mses = [x.strip() for x in fh.readlines()]
 
-opt_imaging_pars = imagingOptimalParameters(continuum_mses,metadata)
+opt_imaging_pars = imagingOptimalParameters(continuum_mses,metadata, exclude_7m  = exclude_7m, only_7m = only_7m)
 vis_image_parameters = opt_imaging_pars['visBased']
 field_image_parameters = opt_imaging_pars['fieldBased']
 continuum_files_per_field = opt_imaging_pars['filesPerField']

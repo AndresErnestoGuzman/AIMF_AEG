@@ -40,7 +40,7 @@ CONTRIBUTOR NOTE:
 """
 import copy
 import json
-import os, sys, glob, subprocess
+import os, sys, glob, subprocess, re
 
 with open('metadata.json', 'r') as fh:
     metadata = json.load(fh)
@@ -74,8 +74,6 @@ imaging_parameters = {
 }
 
 
-
-
 # added for 7M only data: higher threshold
 for key in imaging_parameters:
     if "_7M_" in key:
@@ -87,7 +85,7 @@ imaging_parameters_nondefault = {}
 
 
 if True:
-    mascaras = glob.glob("imaging_results/*_robust0.image.tt0.fits")
+    mascaras = glob.glob("imaging_results/*M_robust0.image.tt0.fits")
     #re.sub('.*(uid[^.]+).*','\\1',os.path.split(continuum_ms)[1])
     for mm in mascaras:
         (path,filename) = os.path.split(mm)
@@ -114,7 +112,7 @@ if True:
             imaging_parameters_nondefault[key]['usemask']   = {0:'user', 1:'pb'}
             imaging_parameters_nondefault[key]['maskname']  = {0: maskname,1:''}
         else:
-            sigma = float(subprocess.check_output(['gethead',basename+'.fits','RMS']))
+            sigma = float(subprocess.check_output(['gethead','imaging_results/'+basename+'.fits','RMS']))
             #sigma = 1
             imaging_parameters_nondefault[key]['threshold'] = {0: "{0:.3f}mJy".format(2.5e3*sigma)}
             imaging_parameters_nondefault[key]['niter']     = {0: 2000}
@@ -132,7 +130,7 @@ for key in imaging_parameters_nondefault:
     imaging_parameters[key].update(imaging_parameters_nondefault[key])
 
 # Default sigma calculation for threshold
-images_for_sigma_estimation = glob.glob("imaging_results/*0.image.tt0.fits")
+images_for_sigma_estimation = glob.glob("imaging_results/*M_robust0.image.tt0.fits")
 for i in images_for_sigma_estimation:
     (path,filename) = os.path.split(i)
     auxiliar = filename.split('_')

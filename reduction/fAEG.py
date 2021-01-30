@@ -1,7 +1,9 @@
-from metadata_tools import determine_imsize
+from metadata_tools import determine_imsize,determine_phasecenter, logprint
+import re, os, math
+from taskinit import msmdtool
 
-def imagingOptimalParameters(mses,metadata):
-
+def imagingOptimalParameters(mses,metadata,exclude_7m = True, only_7m = False):
+    msmd = msmdtool()
     files_per_field = {}
     vis_image_parameters = {}
     bands = set()
@@ -35,7 +37,7 @@ def imagingOptimalParameters(mses,metadata):
         imsize = [dra, ddec]
         vis_image_parameters[ms]['imsize'] = imsize
         vis_image_parameters[ms]['cellsize'] = ['{0:0.2f}arcsec'.format(pixscale)] * 2
-        vis_image_parameters[ms]['cellsize_in_arcsec'] = [floor(pixscale*1000 + 0.5)/1000] * 2  # in arcsec
+        vis_image_parameters[ms]['cellsize_in_arcsec'] = [math.floor(pixscale*1000 + 0.5)/1000] * 2  # in arcsec
         msmd.open(ms)
         antennae = ",".join([x for x in msmd.antennanames() if 'CM' not in x])
         vis_image_parameters[ms]['12M_antennae'] = antennae

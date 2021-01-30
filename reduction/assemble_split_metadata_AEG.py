@@ -17,7 +17,7 @@ if os.getenv('ALMAIMF_ROOTDIR') is None:
                          "specify ALMAIMF_ROOTDIR environment variable "
                          "or your PYTHONPATH variable to include the directory"
                          " containing the ALMAIMF code.")
-else:
+elif not os.getenv('ALMAIMF_ROOTDIR') in sys.path:
     sys.path.append(os.getenv('ALMAIMF_ROOTDIR'))
 
 from parse_contdotdat import parse_contdotdat, contchannels_to_linechannels # noqa: E402
