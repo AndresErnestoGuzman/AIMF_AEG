@@ -46,35 +46,18 @@ try:
 except:
     from_cmd = False
 
-if 'almaimf_rootdir' in locals():
-    os.environ['ALMAIMF_ROOTDIR'] = almaimf_rootdir
-if os.getenv('ALMAIMF_ROOTDIR') is None:
-    try:
-        import metadata_tools
-        from metadata_tools import determine_phasecenter, logprint, json_load_byteified
-        os.environ['ALMAIMF_ROOTDIR'] = os.path.split(metadata_tools.__file__)[0]
-    except ImportError:
-        raise ValueError("metadata_tools not found on path; make sure to "
-                         "specify ALMAIMF_ROOTDIR environment variable "
-                         "or your PYTHONPATH variable to include the directory"
-                         " containing the ALMAIMF code.")
-elif not os.getenv('ALMAIMF_ROOTDIR') in sys.path:
-    sys.path.append(os.getenv('ALMAIMF_ROOTDIR'))
+execfile("AIMF_AEG/reduction/defineRootdir.py")
 
-almaimf_rootdir = os.getenv('ALMAIMF_ROOTDIR')
-
-
-from getversion import git_date, git_version
-from metadata_tools import determine_phasecenter, logprint, json_load_byteified
+#from getversion import git_date, git_version
+from metadata_tools import logprint, json_load_byteified
 #from make_custom_mask import make_custom_mask
 
 from imaging_parameters import imaging_parameters
-from fAEG import imagingOptimalParameters
+from fAEG import imagingOptimalParameters, dirtyImage, image
 
-
-from tasks import tclean, exportfits, plotms, split
-from taskinit import msmdtool, iatool
-from utils import validate_mask_path
+#from tasks import tclean, exportfits, plotms, split
+#from taskinit import  iatool
+#from utils import validate_mask_path
 
 if os.path.exists('metadata.json'):
     with open('metadata.json', 'r') as fh:
@@ -83,8 +66,8 @@ else:
     raise FileError("metadata.json not found!")
 
 
-msmd = msmdtool()
-ia = iatool()
+#msmd = msmdtool()
+#ia = iatool()
 
 imaging_root = "imaging_results"
 if not os.path.exists(imaging_root):
@@ -157,153 +140,19 @@ for band in bands:
             continuum_visibilities = [x.replace("split.cal","split.cal"+suffix) for x in continuum_files_per_field[band][field]]
             imsize = field_image_parameters[band][field]['imsize']
             cell = field_image_parameters[band][field]['cellsize']
-            contimagename = os.path.join(imaging_root, field) +"_"+ band +"_" + arrayname + suffix
+            #contimagename = os.path.join(imaging_root, field) +"_"+ band +"_" + arrayname + suffix
 
             for robust in [0]:
-                key = "{0}_{1}_{2}_robust{3}".format(field, band,arrayname,robust)
-                impars = imaging_parameters[key]
-                #print impars
-                #sys.exit()
-                impars = copy.copy(impars)
-                dirty_impars = copy.copy(impars)
-                if 'maskname' in dirty_impars:
-                    del dirty_impars['maskname']
-                dirty_impars['niter'] = 0
-                dirty_impars['usemask'] = 'pb'
-                dirty_impars['pbmask'] = 0.25
-                if 'threshold' in dirty_impars:
-                    del dirty_impars['threshold']
-
-                ## Dirty imaging
-                imname = contimagename+"_robust{0}_dirty".format(robust)
-                if (not os.path.exists(imname+".image.tt0") and not dryRun):
-                    logprint("Dirty imaging file {0}".format(imname),
-                             origin='almaimf_cont_imaging')
-                    #antennae = [vis_image_parameters[cvis][arrayname+'_antennae'] for cvis in continuum_visibilities]
-                    tclean(vis = continuum_visibilities,
-                           field = field.encode(),
-                           imagename = imname,
-                           #phasecenter = phasecenter,
-                           outframe = 'LSRK',
-                           veltype = 'radio',
-                           #usemask='pb',
-                           interactive = False,
-                           cell = cell,
-                           imsize = imsize,
-                           antenna = antennae,
-                           pbcor = True,
-                           **dirty_impars
-                          )
-
-                    stats = imstat(imagename=imname+".image.tt0",algorithm='hinged-fences',fence=2)
-                    mad = stats['medabsdevmed'][0]
-                    rms  = 1.4826* mad
-                    imhead(imname+".image.tt0",mode='put',hdkey='RMS',hdvalue=rms)
-    
-                    ia.open(imname+".residual.tt0")
-                    ia.sethistory(origin='almaimf_cont_imaging',
-                                  history=["{0}: {1}".format(key, val) for key, val in
-                                           impars.items()])
-                    ia.sethistory(origin='almaimf_cont_imaging',
-                                  history=["git_version: {0}".format(git_version),
-                                           "git_date: {0}".format(git_date)])
-                    ia.close()
-                    exportfits(imname+".image.tt0", imname+".image.tt0.fits", overwrite = True)
-                else:
-                	logprint("Skipping dirty image block. Image={image}, visibilities={vis}".format(image=imname,vis=continuum_visibilities))
-                
+                imname = os.path.join(imaging_root, field) +"_"+ band +"_" + arrayname + suffix+"_robust{0}_dirty".format(robust)
+                dirtyImage(visibilities = continuum_visibilities, cell=cell, field=field, band=band, arrayname=arrayname, robust=robust, imaging_root=imaging_root,
+                            imsize=imsize, antennae = antennae, phasecenter=phasecenter, suffix=suffix, imaging_parameters = imaging_parameters, dryrun = dryRun)
+ 
                 if onlyDirtyImaging:
                     logprint("Only dirty images this run.")
                     continue
- 
-                if not 'maskname' in impars:
-                    impars['usemask'] = 'pb'
-                    maskname = ''
-                    if not 'pblimit' in impars:
-                        raise KeyError('Either define maskname or set pblimit > 0')
-
-                # for compatibility w/self-calibration: if a list of parameters is used,
-                # just use the 0'th iteration's parameters
                 
+                imname = os.path.join(imaging_root, field) +"_"+ band +"_" + arrayname + suffix+"_robust{0}".format(robust)
+                image(visibilities=continuum_visibilities, cell=cell, field=field, band=band, arrayname=arrayname, robust=robust, imaging_root=imaging_root,
+                        imsize=imsize, antennae = antennae, phasecenter=phasecenter, suffix=suffix, imaging_parameters = imaging_parameters, dryrun = dryRun)
+
                 
-                for iteracion in impars['threshold'].keys():
-                    impars_thisiter = copy.copy(impars)
-                    
-                    for key, val in impars_thisiter.items():
-                        if isinstance(val, dict):
-                            impars_thisiter[key] = val[iteracion]
-
-                    if impars_thisiter['usemask'] == 'pb'and 'maskname' in impars_thisiter:
-                        del impars_thisiter['maskname']
-                    elif impars_thisiter['usemask'] == 'user':
-                        if 'maskname' in impars_thisiter:
-                            maskname = validate_mask_path(impars_thisiter['maskname'],
-                                                          os.getenv('ALMAIMF_ROOTDIR'))
-                            del impars_thisiter['maskname']
-                        if 'mask' not in impars_thisiter:
-                            impars_thisiter['mask'] = maskname
-
-                    imname = contimagename+"_robust{0}".format(robust)
-
-                    if not os.path.exists(imname+".image.tt0"):
-                        logprint("Cleaning file {0} for the first time. New image.".format(imname),
-                                 origin='almaimf_cont_imaging')
-                    else:
-                        logprint("Cleaning already existing file {0}. Will start from this image in tclean.".format(imname),
-                                 origin='almaimf_cont_imaging')
-                    
-                    antennae = [vis_image_parameters[cvis][arrayname+'_antennae'] for cvis in continuum_files_per_field[band][field]]
-                    # print """ tclean(vis = {0},
-                    #        field = {1},
-                    #        imagename = {2},
-                    #        phasecenter = {3},
-                    #        outframe = 'LSRK',
-                    #        veltype = 'radio',
-                    #        interactive = False,
-                    #        cell = {4},
-                    #        imsize = {5},
-                    #        antenna = {6},
-                    #        pbcor = True,
-                    #        **impars_thisiter
-                    #       )""".format(continuum_visibilities,field.encode(),imname,phasecenter,cellsize,imsize,antennae)
-                    # sys.exit()
-                    rmtables(imname+".mask")
-                    if not dryRun:
-	                    if os.path.exists(imname+".mask"):
-	                        os.system("rm -rf "+imname+".mask")
-	                    tclean(vis = continuum_visibilities,
-	                           field = field.encode(),
-	                           imagename = imname,
-	                           #phasecenter = phasecenter,
-	                           outframe = 'LSRK',
-	                           veltype = 'radio',
-	                           #usemask='user',
-	                           interactive = False,
-	                           cell = cell,
-	                           imsize = imsize,
-	                           antenna = antennae,
-	                           pbcor = True,
-	                           **impars_thisiter
-	                          )
-
-	                    stats = imstat(imagename=imname+".image.tt0",algorithm='hinged-fences',fence=2)
-	                    mad = stats['medabsdevmed'][0]
-	                    rms  = 1.4826* mad
-	                    imhead(imname+".image.tt0",mode='put',hdkey='RMS',hdvalue=rms)
-	 
-	                    #os.system("cp -r {0}".image.tt0" {0}.iter{1}".format(imname,iteracion))
-	                    ia.open(imname+".image.tt0")
-	                    ia.sethistory(origin='almaimf_cont_imaging',
-	                                  history=["{0}: {1}".format(key, val) for key, val in
-	                                           impars.items()])
-	                    ia.sethistory(origin='almaimf_cont_imaging',
-	                                  history=["git_version: {0}".format(git_version),
-	                                           "git_date: {0}".format(git_date)])
-	                    ia.close()
-
-	                    exportfits(imname+".image.tt0", imname+".image.tt0.fits", overwrite = True)
-	                    exportfits(imname+".image.tt0.pbcor", imname+".image.tt0.pbcor.fits", overwrite = True)
-	                    exportfits(imname+".model.tt0", imname+".model.tt0.fits", overwrite = True)
-	                    exportfits(imname+".residual.tt0", imname+".residual.tt0.fits", overwrite = True)
-                    else:
-                    	logprint("Dry run: skipping imaging of {image} from visibilities {vis}.".format(image=imname,vis=continuum_visibilities))

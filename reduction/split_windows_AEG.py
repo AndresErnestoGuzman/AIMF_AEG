@@ -57,21 +57,7 @@ if len(sys.argv) > 2:
         almaimf_rootdir = aux
 
 
-if 'almaimf_rootdir' in locals():
-    os.environ['ALMAIMF_ROOTDIR'] = almaimf_rootdir
-if os.getenv('ALMAIMF_ROOTDIR') is None:
-    try:
-        import metadata_tools
-        os.environ['ALMAIMF_ROOTDIR'] = os.path.split(metadata_tools.__file__)[0]
-        almaimf_rootdir = os.getenv('ALMAIMF_ROOTDIR')
-    except ImportError:
-        raise ValueError("metadata_tools not found on path; make sure to "
-                         "specify ALMAIMF_ROOTDIR environment variable "
-                         "or your PYTHONPATH variable to include the directory"
-                         " containing the ALMAIMF code.")
-else:
-    almaimf_rootdir = os.getenv('ALMAIMF_ROOTDIR')
-    sys.path.append(almaimf_rootdir)
+execfile("AIMF_AEG/reduction/defineRootdir.py")
 
 scripts = [
            'assemble_split_metadata_AEG.py',

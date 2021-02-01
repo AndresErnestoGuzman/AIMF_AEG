@@ -9,19 +9,7 @@ from taskinit import mstool, tbtool
 from tasks import split, flagdata
 
 
-if 'almaimf_rootdir' in locals():
-    os.environ['ALMAIMF_ROOTDIR'] = almaimf_rootdir
-if os.getenv('ALMAIMF_ROOTDIR') is None:
-    try:
-        import metadata_tools
-        os.environ['ALMAIMF_ROOTDIR'] = os.path.split(metadata_tools.__file__)[0]
-    except ImportError:
-        raise ValueError("metadata_tools not found on path; make sure to "
-                         "specify ALMAIMF_ROOTDIR environment variable "
-                         "or your PYTHONPATH variable to include the directory"
-                         " containing the ALMAIMF code.")
-else:
-    sys.path.append(os.getenv('ALMAIMF_ROOTDIR'))
+execfile("AIMF_AEG/reduction/defineRootdir.py")
 
 msmd = msmdtool()
 ms = mstool()
