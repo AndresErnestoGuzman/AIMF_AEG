@@ -1,9 +1,42 @@
 
 from metadata_tools import determine_imsize, determine_phasecenter, logprint
 import re, os, math, copy
-from taskinit import msmdtool, iatool
-from tasks import tclean, exportfits, imstat, imhead, rmtables
+from taskinit import msmdtool, iatool, tbtool
+from tasks import tclean, exportfits, imstat, imhead, rmtables, split
 from utils import validate_mask_path
+
+def create_selfcal_ms_files(mses, arrayname, vis_data, do_bsens=[False]):
+    selfcal_mses = []
+    tb = tbtool()
+    for cms in mses:
+        (directory,cmsfilename) = os.path.split(cms)
+        scbasename = re.sub('(.+X[^X\.]+).*','\\1',cmsfilename)
+        for dbs in do_bsens:
+            suffix = "_bsens" if dbs else ""
+            scms = "{0}_{1}_selfcal{2}.ms".format(scbasename,arrayname,suffix)
+            scms = os.path.join(directory,scms)
+            selfcal_mses.append(scms)
+            if os.path.exists(scms):
+                logprint("Selfcal MS {0} already exists. Using that one.".format(scms),origin='cis_S2_create_selfcal_ms_files')
+            else:
+                logprint("Selfcal MS {0} does not exists. Splitting a new one.".format(scms),origin='cis_S2_create_selfcal_ms_files')
+                tb.open(cms)
+                if 'CORRECTED_DATA' in tb.colnames():
+                    datacolumn='corrected'
+                else:
+                    datacolumn='data'
+                tb.close()
+                split(  vis = cms,
+                        outputvis = scms,
+                        datacolumn = datacolumn,
+                        antenna = vis_data[cms][arrayname+'_antennae'],
+                        #spw = spwstr,
+                        #width = width,
+                        #field = field,
+                        )
+                logprint("Created new selfcal MS: {0}".format(scms), origin='cis_S2_create_selfcal_ms_files')
+    return selfcal_mses
+
 
 def image(visibilities, cell, field, band, arrayname, robust,imsize, antennae , phasecenter, suffix, imaging_parameters,imaging_root="imaging_results", pbmask=0.25, savemodel='none', datacolumn='corrected',dryrun=False):
     
@@ -131,7 +164,7 @@ def dirtyImage(visibilities, cell, field, band, arrayname, robust,imsize, antenn
             	"imsize={imsize}","antenna={antennae}","pbcor={pbcor}"]).format(vis = visibilities,
             	field = field.encode(), imagename = imname,phasecenter = phasecenter, outframe = 'LSRK',
             	veltype = 'radio', interactive = False, cell = cell, imsize = imsize,
-            		antenna = antennae, pbcor = True)+','.join([kk+"="+str(dirty_impars[kk]) for kk in dirty_impars.keys()])+")",origin='dirtyImage_function')
+            	antennae = antennae, pbcor = True)+','.join([kk+"="+str(dirty_impars[kk]) for kk in dirty_impars.keys()])+")",origin='dirtyImage_function')
         else:
             tclean(vis = visibilities,
                    field = field.encode(),
