@@ -41,9 +41,15 @@ CONTRIBUTOR NOTE:
 import copy
 import json
 import os, sys, glob, subprocess, re
+from metadata_tools import json_load_byteified
 
-with open('metadata.json', 'r') as fh:
-    metadata = json.load(fh)
+
+if os.path.exists('metadata.json'):
+    with open('metadata.json', 'r') as fh:
+        metadata = json_load_byteified(fh)
+else:
+    raise FileError("metadata.json not found!")
+
 
 allfields = set()
 for band in set(metadata.keys()).difference({'fields','ebs'}):
@@ -85,20 +91,17 @@ imaging_parameters_nondefault = {}
 
 
 if True:
-    mascaras = glob.glob("imaging_results/*M_robust0.image.tt0.fits")
+    mascaras = glob.glob("AIMF_AEG/reduction/clean_regions/*M_robust0.image.tt0_4.0sigma_*Jy")
     #re.sub('.*(uid[^.]+).*','\\1',os.path.split(continuum_ms)[1])
     for mm in mascaras:
         (path,filename) = os.path.split(mm)
-        basename = filename.replace('.fits','')
-        auxiliar = basename.split('_')
-        field = auxiliar.pop(0)
-        band = auxiliar.pop(0)
-        array = auxiliar.pop(0)
-        robust = auxiliar.pop(0).replace('.image.tt0','')
-        key = "{0}_{1}_{2}_{3}".format(field, band, array, robust)
+        match = re.match(r"([^_]+)_(B[1-9]+)_([127]+M)_.*(robust[^\._]+).*\.image\.tt0",filename)
+        basename = match.group(0)
+        (field, band, array, robust) = match.group(1,2,3,4)
+        key = '_'.join(match.group(1,2,3,4))
         imaging_parameters_nondefault[key] = {}
 
-        maskname = glob.glob("reduction/reduction/clean_regions/"+basename+"_4.0sigma*fits")
+        maskname = glob.glob("AIMF_AEG/reduction/clean_regions/"+basename+"_4.0sigma*Jy")
         if len(maskname)>0:
             maskname = maskname[0].replace('.fits','')
             (path,maskname) = os.path.split(maskname)
@@ -106,19 +109,24 @@ if True:
             thresholdmJy = auxiliar.pop()
             thresholdmJy = float(thresholdmJy.replace("mJy",""))
             sigma = thresholdmJy*1e-3/4
-
+            imaging_parameters_nondefault[key]['sigma'] = sigma
             imaging_parameters_nondefault[key]['threshold'] = {0: "{0:.3f}mJy".format(2e3*sigma), 1:"{0:.3f}mJy".format(2e3*sigma)}
             imaging_parameters_nondefault[key]['niter']     = {0: 1000,  1:2000}
             imaging_parameters_nondefault[key]['usemask']   = {0:'user', 1:'pb'}
             imaging_parameters_nondefault[key]['maskname']  = {0: maskname,1:''}
-        else:
+            imaging_parameters_nondefault[key]['pbmask']  = {0: 0.0,1:0.25}
+        elif os.path.exists('imaging_results/'+basename+'.fits'):
             sigma = float(subprocess.check_output(['gethead','imaging_results/'+basename+'.fits','RMS']))
             #sigma = 1
+            imaging_parameters_nondefault[key]['sigma'] = sigma
             imaging_parameters_nondefault[key]['threshold'] = {0: "{0:.3f}mJy".format(2.5e3*sigma)}
             imaging_parameters_nondefault[key]['niter']     = {0: 2000}
             imaging_parameters_nondefault[key]['usemask']   = {0:'pb'}
             imaging_parameters_nondefault[key]['maskname']  = {0: ''}
-    
+            imaging_parameters_nondefault[key]['pbmask']  = {0: 0.0,1:0.25}
+        else:
+            print "Cannot determine sigma nor threshold for {0} sir.\nFinishing.".format(basename)
+            raise
 
 for key in imaging_parameters_nondefault:
     if "bsens" in key:
@@ -143,22 +151,61 @@ for i in images_for_sigma_estimation:
         rms = float(subprocess.check_output(['gethead','RMS',i]))
         imaging_parameters[key]['threshold'] = {0:"{0:.2f}mJy".format(rms*1000*2)}
 
+
+sc_ip = copy.copy(imaging_parameters)
+images = glob.glob("AIMF_AEG/reduction/clean_regions/*M_robust0.image.tt0_4.0sigma_*Jy")
+for mm in images:
+    (path,filename) = os.path.split(mm)
+    match = re.match(r"([^_]+)_(B[1-9]+)_([127]+M)_.*(robust[^\._]+).*\.image\.tt0",filename)
+    basename = match.group(0)
+    (field, band, array, robust) = match.group(1,2,3,4)
+    key = '_'.join(match.group(1,2,3,4))
+    imaging_parameters_nondefault[key] = {}
+
+    masknames = glob.glob("AIMF_AEG/reduction/clean_regions/"+basename+"*sigma*Jy")
+    masknames.sort(reverse=True)
+    sc_ip[key]['maskname'] = {}
+    sc_ip[key]['niter'] = {}
+    sc_ip[key]['threshold'] = {}
+    sc_ip[key]['usemask'] = {}
+    sc_ip[key]['pbmask'] = {}
+    i = 1
+    for mm in masknames:
+        match = re.match(r".*_([0-9\.]+)sigma.*",mm)
+        nsigma = match.group(1)
+        sc_ip[key]['maskname'][i] = mm
+        sc_ip[key]['niter'][i] = 2**(i+4)
+        sc_ip[key]['threshold'][i] = "{0:.3f}mJy".format(float(nsigma)*sc_ip[key]['sigma']*500.)
+        sc_ip[key]['usemask'][i] = 'user'
+        sc_ip[key]['pbmask'][i] = 0.0
+        i += 1
+    
+    sc_ip[key]['maskname'][i] = ''
+    sc_ip[key]['niter'][i] = 5000
+    sc_ip[key]['threshold'][i] = "{0:.3f}mJy".format(sc_ip[key]['sigma']*2.e3)
+    sc_ip[key]['usemask'][i] = 'pb'
+    sc_ip[key]['pbmask'][i] = 0.25
+
 """
 Self-calibration parameters are defined here
 """
 
 default_selfcal_pars = {
-    ii: {
         "solint": "inf",
         "gaintype": "T",
         "solnorm": True,
         # 'combine': 'spw', # consider combining across spw bounds
-        "calmode": "p",
-    }
-    for ii in range(1, 5)
-}
+        "calmode": "p",}
 
-selfcal_pars_default = {key: copy.deepcopy(default_selfcal_pars) for key in imaging_parameters}
+sc_p = {}
+for key in sc_ip.keys():
+    if '7M' in key or not 'B6' in key:
+        continue
+    sc_p[key] = {}
+    for i in sc_ip[key]['threshold'].keys():
+        sc_p[key][i] = copy.deepcopy(default_selfcal_pars)
+        if i>1:
+            sc_p[key][i]['solint'] =  "{0}s".format(10+10*(max(sc_ip[key]['threshold'].keys())-i))
 
 selfcal_pars_custom = {
 #     "G343.1261-00.0623_B6_12M_robust-2": {
@@ -171,7 +218,7 @@ selfcal_pars_custom = {
 }
 
 
-selfcal_pars = selfcal_pars_default.copy()
+selfcal_pars = sc_p.copy()
 for key in selfcal_pars_custom:
     for iternum in selfcal_pars_custom[key]:
         if iternum in selfcal_pars[key]:

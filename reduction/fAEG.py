@@ -1,49 +1,95 @@
 
 from metadata_tools import determine_imsize, determine_phasecenter, logprint
-import re, os, math, copy
-from taskinit import msmdtool, iatool, tbtool
+import re, os, math, copy, numpy
+from taskinit import msmdtool, iatool, tbtool, mstool
 from tasks import tclean, exportfits, imstat, imhead, rmtables, split
 from utils import validate_mask_path
 
-def create_selfcal_ms_files(mses, arrayname, vis_data, do_bsens=[False]):
+def check_model_column(vis):
+    
+    if isinstance(vis,str):
+        vis = [vis]
+    elif not isinstance(vis,list):
+        logprint("Visibility type {0} not recognized.".format(vis),origin=check_model_column)
+        raise Exception
+
+    rr =[]
+    for visi in vis:
+        ms = mstool()
+        ms.open(visi)
+        model_data = ms.getdata(['MODEL_PHASE'])
+        ms.close()
+        if 'model_phase' not in model_data:
+            logprint("Error encountered: model column of {0} was not populated!".format(os.path.split(visi)[1]),
+                     origin='check_model_column')
+            raise Exception
+        elif numpy.all(model_data['model_phase'] == 0):
+            logprint("Model column of {0} is zero!".format(os.path.split(visi)[1]),
+                     origin='check_model_column')
+            raise Exception
+        else:
+            logprint("Model column of {0} is populated.".format(os.path.split(visi)[1]),
+                     origin='check_model_column')
+        rr.append(True)
+    return rr
+
+def selfcal_name(ms, arrayname, field, band, bsens=False):
+    (directory,msfilename) = os.path.split(ms)
+    suffix = "_bsens" if bsens else ""
+    scbasename = re.sub('(.+X[^X\.]+).*','\\1',msfilename)
+    scms = "{uid}_{fi}_{band}_{arr}_selfcal{suffix}.ms".format(uid=scbasename,arr=arrayname,suffix=suffix,fi=field,band=band)
+    scms = os.path.join(directory,scms)
+    return scms
+
+def create_selfcal_ms_files(mses, arrayname, vis_data,eb_data, do_bsens=[False]):
     selfcal_mses = []
     tb = tbtool()
     for cms in mses:
-        (directory,cmsfilename) = os.path.split(cms)
-        scbasename = re.sub('(.+X[^X\.]+).*','\\1',cmsfilename)
+        (directory,msfilename) = os.path.split(cms)
+        ebname = re.sub('.*(uid.+X[^X\.]+).*','\\1',msfilename)
+        fields = eb_data[ebname]['fields']
+        band = eb_data[ebname]['band']
         for dbs in do_bsens:
-            suffix = "_bsens" if dbs else ""
-            scms = "{0}_{1}_selfcal{2}.ms".format(scbasename,arrayname,suffix)
-            scms = os.path.join(directory,scms)
-            selfcal_mses.append(scms)
-            if os.path.exists(scms):
-                logprint("Selfcal MS {0} already exists. Using that one.".format(scms),origin='cis_S2_create_selfcal_ms_files')
-            else:
-                logprint("Selfcal MS {0} does not exists. Splitting a new one.".format(scms),origin='cis_S2_create_selfcal_ms_files')
-                tb.open(cms)
-                if 'CORRECTED_DATA' in tb.colnames():
-                    datacolumn='corrected'
+            for field in fields:
+                scms = selfcal_name(ms=cms,arrayname=arrayname,field=field, band=band,bsens=dbs)
+                
+                # for key in selfcal_mses_data[scms].keys():
+                #     if 'antennae' in key and not key==arrayname+'_antennae':
+                #         del  selfcal_mses_data[scms][key]
+
+                if os.path.exists(scms):
+                    logprint("Selfcal MS {0} already exists. Using that one.".format(scms),origin='create_selfcal_ms_files')
                 else:
-                    datacolumn='data'
-                tb.close()
-                split(  vis = cms,
-                        outputvis = scms,
-                        datacolumn = datacolumn,
-                        antenna = vis_data[cms][arrayname+'_antennae'],
-                        #spw = spwstr,
-                        #width = width,
-                        #field = field,
-                        )
-                logprint("Created new selfcal MS: {0}".format(scms), origin='cis_S2_create_selfcal_ms_files')
+                    logprint("Selfcal MS {0} does not exists. Splitting a new one.".format(scms),origin='create_selfcal_ms_files')
+                    tb.open(cms)
+                    if 'CORRECTED_DATA' in tb.colnames():
+                        datacolumn='corrected'
+                    else:
+                        datacolumn='data'
+                    tb.close()
+                    split(  vis = cms,
+                            outputvis = scms,
+                            datacolumn = datacolumn,
+                            antenna = vis_data[cms][arrayname+'_antennae'],
+                            #spw = spwstr,
+                            #width = width,
+                            field = field,
+                            )
+                    logprint("Created new selfcal MS: {0}".format(scms), origin='create_selfcal_ms_files')
+                selfcal_mses.append(scms)
     return selfcal_mses
 
 
-def image(visibilities, cell, field, band, arrayname, robust,imsize, antennae , phasecenter, suffix, imaging_parameters,imaging_root="imaging_results", pbmask=0.25, savemodel='none', datacolumn='corrected',dryrun=False):
+def image(visibilities, cell, field, band, arrayname, robust,imsize, antennae , phasecenter, suffix, imaging_parameters ,imagename=None,imaging_root="imaging_results", pbmask=0.25, savemodel='none', datacolumn='corrected',dryrun=False):
     
     logprint("\n*** Starting image function ***",origin='image_function')
     ia = iatool()
     key = "{0}_{1}_{2}_robust{3}".format(field, band,arrayname,robust)
-    impars = imaging_parameters[key]
+    if key in imaging_parameters:
+        impars = imaging_parameters[key]
+    else:
+        impars = imaging_parameters
+
     if not 'maskname' in impars:
         impars['usemask'] = 'pb'
         maskname = ''
@@ -67,7 +113,10 @@ def image(visibilities, cell, field, band, arrayname, robust,imsize, antennae , 
             if 'mask' not in impars_thisiter:
                 impars_thisiter['mask'] = maskname
 
-        imname = os.path.join(imaging_root, field) +"_"+ band +"_" + arrayname + suffix+"_robust{0}".format(robust)
+        if imagename==None:
+            imname = os.path.join(imaging_root, field) +"_"+ band +"_" + arrayname + suffix+"_robust{0}".format(robust)
+        else:
+            imname = imagename
 
         if not os.path.exists(imname+".image.tt0"):
             logprint("Cleaning file {0} for the first time. New image.".format(imname),
@@ -96,6 +145,10 @@ def image(visibilities, cell, field, band, arrayname, robust,imsize, antennae , 
                                     cell = cell, imsize = imsize, antennae = antennae, pbcor = True, savemodel = savemodel,    
                                     datacolumn = datacolumn)+','.join([kk+"="+str(impars_thisiter[kk]) for kk in impars_thisiter.keys()])+")",origin='image_function')
         else:
+            tcleanargs = getattr(tclean,'parameters').keys()
+            difargs = set(impars_thisiter.keys()) - set(tcleanargs)
+            for difarg in difargs:
+                del impars_thisiter[difarg]
             tclean(vis = visibilities,
                    field = field.encode(),
                    imagename = imname,
@@ -119,7 +172,7 @@ def image(visibilities, cell, field, band, arrayname, robust,imsize, antennae , 
 
             #os.system("cp -r {0}".image.tt0" {0}.iter{1}".format(imname,iteracion))
             ia.open(imname+".image.tt0")
-            ia.sethistory(origin='almaimf_cont_imaging',
+            ia.sethistory(origin='image_function',
                history=["{0}: {1}".format(key, val) for key, val in
                                        impars.items()])
             #ia.sethistory(origin='almaimf_cont_imaging',
@@ -133,7 +186,7 @@ def image(visibilities, cell, field, band, arrayname, robust,imsize, antennae , 
             exportfits(imname+".residual.tt0", imname+".residual.tt0.fits", overwrite = True)
     logprint("*** Ending image function ***",origin='image_function')
 
-def dirtyImage(visibilities, cell, field, band, arrayname, robust,imsize, antennae , phasecenter, suffix, imaging_parameters,imaging_root="imaging_results", pbmask=0.25,dryrun=False):
+def dirtyImage(visibilities, cell, field, band, arrayname, robust,imsize, antennae , phasecenter, suffix, imaging_parameters,imagename=None,imaging_root="imaging_results", pbmask=0.25,dryrun=False):
     
     logprint("\n*** Starting dirtyImage function ***",origin='dirtyImage_function')
     ia = iatool()
@@ -149,7 +202,11 @@ def dirtyImage(visibilities, cell, field, band, arrayname, robust,imsize, antenn
         del dirty_impars['threshold']
 
     ## Dirty imaging
-    imname = os.path.join(imaging_root, field) +"_"+ band +"_" + arrayname + suffix+"_robust{0}_dirty".format(robust)
+    if imagename==None:
+        imname = os.path.join(imaging_root, field) +"_"+ band +"_" + arrayname + suffix+"_robust{0}_dirty".format(robust)
+    else:
+        imname = imagename
+
     if os.path.exists(imname+".image.tt0"):
     	logprint("Skipping dirty image block because {image} already exists. Visibilities={vis}".format(image = imname+
     		".image.tt0",vis = visibilities),origin='dirtyImage_function')
@@ -166,6 +223,10 @@ def dirtyImage(visibilities, cell, field, band, arrayname, robust,imsize, antenn
             	veltype = 'radio', interactive = False, cell = cell, imsize = imsize,
             	antennae = antennae, pbcor = True)+','.join([kk+"="+str(dirty_impars[kk]) for kk in dirty_impars.keys()])+")",origin='dirtyImage_function')
         else:
+            tcleanargs = getattr(tclean,'parameters').keys()
+            difargs = set(dirty_impars.keys()) - set(tcleanargs)
+            for difarg in difargs:
+                del dirty_impars[difarg]
             tclean(vis = visibilities,
                    field = field.encode(),
                    imagename = imname,
@@ -187,7 +248,7 @@ def dirtyImage(visibilities, cell, field, band, arrayname, robust,imsize, antenn
             imhead(imname+".image.tt0",mode='put',hdkey='RMS',hdvalue=rms)
 
             ia.open(imname+".residual.tt0")
-            ia.sethistory(origin='almaimf_cont_imaging',
+            ia.sethistory(origin='dirtyImage_function',
                           history=["{0}: {1}".format(key, val) for key, val in
                                    impars.items()])
             #ia.sethistory(origin='almaimf_cont_imaging',
@@ -197,7 +258,6 @@ def dirtyImage(visibilities, cell, field, band, arrayname, robust,imsize, antenn
             exportfits(imname+".image.tt0", imname+".image.tt0.fits", overwrite = True)
     logprint("*** Ending dirtyImage function ***",origin='dirtyImage_function')
         
-
 def imagingOptimalParameters(mses,metadata,exclude_7m = True, only_7m = False):
     
     logprint("\n*** Starting imagingOptimalParameters ***",origin='imagingOptimalParameters_function')
