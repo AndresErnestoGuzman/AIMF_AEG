@@ -169,7 +169,7 @@ for mm in images:
     sc_ip[key]['threshold'] = {}
     sc_ip[key]['usemask'] = {}
     sc_ip[key]['pbmask'] = {}
-    i = 1
+    i = 0
     for mm in masknames:
         match = re.match(r".*_([0-9\.]+)sigma.*",mm)
         nsigma = match.group(1)
@@ -186,6 +186,7 @@ for mm in images:
     sc_ip[key]['usemask'][i] = 'pb'
     sc_ip[key]['pbmask'][i] = 0.25
 
+selfcal_imaging_pars = sc_ip
 """
 Self-calibration parameters are defined here
 """
@@ -204,7 +205,7 @@ for key in sc_ip.keys():
     sc_p[key] = {}
     for i in sc_ip[key]['threshold'].keys():
         sc_p[key][i] = copy.deepcopy(default_selfcal_pars)
-        if i>1:
+        if i>=1:
             sc_p[key][i]['solint'] =  "{0}s".format(10+10*(max(sc_ip[key]['threshold'].keys())-i))
 
 selfcal_pars_custom = {

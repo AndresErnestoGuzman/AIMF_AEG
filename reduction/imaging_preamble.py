@@ -74,7 +74,7 @@ if 'only_7m' not in locals():
         only_7m = False
 
 do_bsens = [False]
-if os.getenv('DO_BSENS') is not None and os.getenv('DO_BSENS').lower() != 'false':
+if os.getenv('DO_BSENS').lower == 'true':
     do_bsens.append(True)
     logprint("Using BSENS measurement set")
 

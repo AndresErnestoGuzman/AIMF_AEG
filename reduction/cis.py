@@ -32,7 +32,8 @@ variables = ['imaging_parameters', 'from_cmd', 'image', 'almaimf_rootdir', 'excl
 variables.sort()
 logprint("Defined variables in preamble: "+','.join(variables))
 
-from fAEG import create_selfcal_ms_files, selfcal_name, check_model_column
+from fAEG import create_selfcal_ms_files, selfcal_name, check_model_column, sc_iter_image
+from imaging_parameters import selfcal_imaging_pars,  selfcal_pars
 
 # STAGE 2. DEFINE AND/OR CREATE SELFCAL MS FILES.
 
@@ -45,35 +46,62 @@ for band in bands:
 
 # STAGE 3. DIRTY IMAGE. Skip, use continuum_imaging_AEG.py
 
-# STAGE 4 and 5. PRE-SELFCAL
-for band in bands:
-    fields = set(selfcal_files_per_field[band].keys())
+# STAGE 4 and 5. PRE-SELFCAL OR ITER 0. SHALLOW CLEAN.
+sc_iter_image(iteracion=0,arrayname=arrayname,selfcal_files_per_field=selfcal_files_per_field,do_bsens=do_bsens,
+    field_image_parameters=field_image_parameters,vis_image_parameters=vis_image_parameters,continuum_files_per_field=continuum_files_per_field,
+    selfcal_imaging_pars=selfcal_imaging_pars,imaging_root=imaging_root,dryRun = dryRun, savemodel='modelcolumn',datacolumn='data')
+
+#STAGE 5
+caltables = {}
+for sms in selfcal_mses:
+    (directory,msfilename) = os.path.split(sms)
+    caltables[msfilename] = []
+
+for scp in selfcal_pars:
+    match = re.match(r"([^_]+)_(B[1-9]+)_([127]+M)_.*robust([^\._]+)",scp)
+    if match:
+        (field, band, array, robust) = match.group(1,2,3,4)
+    else:
+        logprint("Unrecognized key in selfcal_pars", origin="cis_script")
+        raise Exception()
+    
     if not os.getenv('FIELD_ID') == None:
-        fields = fields & set(os.getenv('FIELD_ID').split())
-    logprint("Doing images for fields {0}".format(", ".join(list(fields))), origin='cis_preselfcal')
-    for field in fields:
-        for dbs in do_bsens:
-            suffix = "_bsens" if dbs else ""
-            phasecenter = field_image_parameters[band][field]['phasecenter'][0]
-            antennae = [vis_image_parameters[vis][arrayname+'_antennae'] for vis in continuum_files_per_field[band][field]]
-            selfcal_visibilities = [x.replace(".ms",suffix+".ms") for x in selfcal_files_per_field[band][field]]
-            imsize = field_image_parameters[band][field]['imsize']
-            cell = field_image_parameters[band][field]['cellsize']
-            #contimagename = os.path.join(imaging_root, field) +"_"+ band +"_" + arrayname + suffix
+        if not field in set(os.getenv('FIELD_ID').split()):
+            continue
 
-            for robust in [0]:
-                imname = os.path.join(imaging_root, field) +"_"+ band +"_" + arrayname + suffix+"_robust{0}_preselfcal".format(robust)
-                if os.path.exists(imname):
-                    logprint("Image {0} already exists. Skip redoing pre-selfcal image.".format(os.path.split(imname)[1]),origin='cis_preselfcal')
-                else:
-                    image(visibilities=selfcal_visibilities, cell=cell, field=field, band=band, arrayname=arrayname, robust=robust, imaging_root=imaging_root,
-                            imsize=imsize, antennae = antennae, phasecenter=phasecenter, suffix=suffix, imaging_parameters = imaging_parameters, dryrun = dryRun,
-                            savemodel='modelcolumn',datacolumn='data',imagename=imname)
+    for iteracion in sorted(selfcal_pars[scp].keys()):
+        if iteracion==0:
+            continue
+        # Next for is for all mses associated with the specific field
+        for sms in selfcal_files_per_field[band][field]:
+            (directory,msfilename) = os.path.split(sms)
+            caltable = re.sub('.*(uid.*)_selfcal\.ms','\\1_iter'+str(iteracion)+'_'+str(selfcal_pars[scp][iteracion]['solint'])+'.cal',msfilename)
+            if dryRun:
+                logprint("Dry run. gaincal(vis={vis}, caltable={caltable},gaintable={gaintable}, {restofpars})".
+                    format(vis = sms, caltable = caltable, gaintable = caltables[msfilename], restofpars=selfcal_pars[scp][iteracion]),origin="cis_script")
+            else:
+                logprint("gaincal. Iteration={0}".format(iteracion),origin="cis_script")
+                gaincal(vis = sms,
+                    caltable = caltable,
+                    gaintable = caltables[msfilename],
+                    **selfcal_pars[scp][iteracion])
+            
+            caltables[msfilename].append(caltable)
 
-                if not dryRun:
-                    if all(check_model_column(vis=selfcal_visibilities)):
-                        logprint("Model column populated from pre-sefcal step.",origin='cis_check_model_column')
+            if dryRun:
+                logprint("Dry run. applycal(vis={vis}, gaintable={gaintable}),interp = 'linear', applymode = 'calonly', calwt = False)".
+                    format(vis = sms,  gaintable = caltables[msfilename], origin = "cis_script"))
+            else:
+                logprint("applycal. Iteration={0}".format(iteracion), origin = "cis_script")
+                clearcal(vis = sms, addmodel = True)
+                applycal(vis = sms,
+                        #gainfield = 
+                        gaintable = caltables[msfilename],
+                        interp = "linear",
+                        applymode = 'calonly',
+                        calwt = False)
 
-
-
-
+        sc_iter_image(iteracion = iteracion, arrayname = arrayname, bands = set([band]), fields=set([field]), selfcal_files_per_field = selfcal_files_per_field, do_bsens = do_bsens, 
+            field_image_parameters = field_image_parameters, vis_image_parameters = vis_image_parameters, continuum_files_per_field = continuum_files_per_field, 
+            selfcal_imaging_pars = selfcal_imaging_pars, imaging_root = imaging_root, dryRun = dryRun, savemodel = 'modelcolumn', datacolumn = 'corrected')
+           
