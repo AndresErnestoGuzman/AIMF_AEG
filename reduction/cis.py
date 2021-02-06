@@ -15,7 +15,7 @@ follows the steps:
 
 This script will more or less follow these.
 """
-dryRun = False
+dryRun = True
 
 # STAGE 1. PREAMBLE DEFINITIONS. Determination of array, antennae selection, et cetera.
 # Import of several packages.
@@ -73,33 +73,36 @@ for scp in selfcal_pars:
         if iteracion==0:
             continue
         # Next for is for all mses associated with the specific field
-        for sms in selfcal_files_per_field[band][field]:
-            (directory,msfilename) = os.path.split(sms)
-            caltable = re.sub('.*(uid.*)_selfcal\.ms','\\1_iter'+str(iteracion)+'_'+str(selfcal_pars[scp][iteracion]['solint'])+'.cal',msfilename)
-            if dryRun:
-                logprint("Dry run. gaincal(vis={vis}, caltable={caltable},gaintable={gaintable}, {restofpars})".
-                    format(vis = sms, caltable = caltable, gaintable = caltables[msfilename], restofpars=selfcal_pars[scp][iteracion]),origin="cis_script")
-            else:
-                logprint("gaincal. Iteration={0}".format(iteracion),origin="cis_script")
-                gaincal(vis = sms,
-                    caltable = caltable,
-                    gaintable = caltables[msfilename],
-                    **selfcal_pars[scp][iteracion])
-            
-            caltables[msfilename].append(caltable)
-
-            if dryRun:
-                logprint("Dry run. applycal(vis={vis}, gaintable={gaintable}),interp = 'linear', applymode = 'calonly', calwt = False)".
-                    format(vis = sms,  gaintable = caltables[msfilename], origin = "cis_script"))
-            else:
-                logprint("applycal. Iteration={0}".format(iteracion), origin = "cis_script")
-                clearcal(vis = sms, addmodel = True)
-                applycal(vis = sms,
-                        #gainfield = 
+        for sms in selfcal_files_per_field[band][field]:            
+            for dbs in do_bsens:
+                suffix = '_bsens' if dbs else ''
+                sms = sms.replace("selfcal.ms","selfcal"+suffix+".ms")
+                (directory,msfilename) = os.path.split(sms)     
+                caltable = re.sub('.*(uid.*)_selfcal\.ms','\\1_iter'+str(iteracion)+'_'+str(selfcal_pars[scp][iteracion]['solint'])+suffix+'.cal',msfilename)
+                if dryRun:
+                    logprint("Dry run. gaincal(vis={vis}, caltable={caltable},gaintable={gaintable}, {restofpars})".
+                        format(vis = sms, caltable = caltable, gaintable = caltables[msfilename], restofpars=selfcal_pars[scp][iteracion]),origin="cis_script")
+                else:
+                    logprint("gaincal. Iteration={0}".format(iteracion),origin="cis_script")
+                    gaincal(vis = sms,
+                        caltable = caltable,
                         gaintable = caltables[msfilename],
-                        interp = "linear",
-                        applymode = 'calonly',
-                        calwt = False)
+                        **selfcal_pars[scp][iteracion])
+                
+                caltables[msfilename].append(caltable)
+
+                if dryRun:
+                    logprint("Dry run. applycal(vis={vis}, gaintable={gaintable}),interp = 'linear', applymode = 'calonly', calwt = False)".
+                        format(vis = sms,  gaintable = caltables[msfilename], origin = "cis_script"))
+                else:
+                    logprint("applycal. Iteration={0}".format(iteracion), origin = "cis_script")
+                    clearcal(vis = sms, addmodel = True)
+                    applycal(vis = sms,
+                            #gainfield = 
+                            gaintable = caltables[msfilename],
+                            interp = "linear",
+                            applymode = 'calonly',
+                            calwt = False)
 
         sc_iter_image(iteracion = iteracion, arrayname = arrayname, bands = set([band]), fields=set([field]), selfcal_files_per_field = selfcal_files_per_field, do_bsens = do_bsens, 
             field_image_parameters = field_image_parameters, vis_image_parameters = vis_image_parameters, continuum_files_per_field = continuum_files_per_field, 

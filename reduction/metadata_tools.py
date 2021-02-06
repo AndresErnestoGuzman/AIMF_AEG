@@ -1,5 +1,5 @@
 import numpy as np
-import os
+import os, re
 import astropy.units as u
 from astropy import constants
 import json 
@@ -20,6 +20,15 @@ qa = qatool()
 st = synthesisutils()
 tb = tbtool()
 ia = iatool()
+
+def explodeKey(string):
+    match = re.match(r"(.*?/?)((?P<field>[^/_]+)_(?P<band>B[1-9]+)_(?P<array>[127M]+)_?(?P<bsens>bsens)?_robust(?P<robustNumber>[0-9]+).*)",string)
+    if match:
+        return({'key':'_'.join([match.group('field'),match.group('band'),match.group('array'),"robust"+match.group('robustNumber')]),
+            'field':match.group('field'),'band':match.group('band'),'array':match.group('array'),'bsens':match.group('bsens'),
+            'robust':match.group('robustNumber'),'prefix':match.group(1),'filename':match.group(2)})
+    else:
+        raise Exception("Key format is not recognized in string. Should be field_BX_(7M-12M-7M12M)(_bsens?)_robustX ")
 
 def logprint(string, origin='almaimf_metadata',
              priority='INFO'):

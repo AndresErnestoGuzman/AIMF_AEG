@@ -1,9 +1,10 @@
 
-from metadata_tools import determine_imsize, determine_phasecenter, logprint
+from metadata_tools import determine_imsize, determine_phasecenter, logprint, explodeKey
 import re, os, math, copy, numpy
 from taskinit import msmdtool, iatool, tbtool, mstool
 from tasks import tclean, exportfits, imstat, imhead, rmtables, split
 from utils import validate_mask_path
+
 
 class UniversalSet(set):
     def __and__(self, other):
@@ -97,8 +98,7 @@ def sc_image(visibilities, cell, field, band, arrayname, robust,imsize, antennae
 
         ia.open(imname+".image.tt0")
         ia.sethistory(origin='image_function',
-           history=["{0}: {1}".format(key, val) for key, val in
-                                   impars.items()])
+           history=["{0}: {1}".format(key, val) for key, val in impars.items()])
         ia.close()
 
         exportfits(imname+".image.tt0", imname+".image.tt0.fits", overwrite = True)

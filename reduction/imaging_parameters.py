@@ -38,11 +38,9 @@ CONTRIBUTOR NOTE:
 
         black -t py27 -l 120 imaging_parameters.py
 """
-import copy
-import json
-import os, sys, glob, subprocess, re
-from metadata_tools import json_load_byteified
 
+import os, sys, glob, subprocess, re, copy, json
+from metadata_tools import json_load_byteified, explodeKey
 
 if os.path.exists('metadata.json'):
     with open('metadata.json', 'r') as fh:
@@ -82,13 +80,12 @@ imaging_parameters = {
 
 # added for 7M only data: higher threshold
 for key in imaging_parameters:
-    if "_7M_" in key:
+    dd = explodeKey(key)
+    if dd['array'] == "7M":
         imaging_parameters[key]["threshold"] = {0:"5mJy"}
-    if "7M" in key:
         imaging_parameters[key]["scales"] = [0, 3, 9, 27]
 
 imaging_parameters_nondefault = {}
-
 
 if True:
     mascaras = glob.glob("AIMF_AEG/reduction/clean_regions/*M_robust0.image.tt0_4.0sigma_*Jy")
@@ -101,17 +98,18 @@ if True:
         key = '_'.join(match.group(1,2,3,4))
         imaging_parameters_nondefault[key] = {}
 
-        maskname = glob.glob("AIMF_AEG/reduction/clean_regions/"+basename+"_4.0sigma*Jy")
+        nsigma = 4
+        maskname = glob.glob("AIMF_AEG/reduction/clean_regions/"+basename+"_"+('{0:.1f}'.format(nsigma))+"sigma*Jy")
         if len(maskname)>0:
             maskname = maskname[0].replace('.fits','')
             (path,maskname) = os.path.split(maskname)
             auxiliar = maskname.split('_')
             thresholdmJy = auxiliar.pop()
             thresholdmJy = float(thresholdmJy.replace("mJy",""))
-            sigma = thresholdmJy*1e-3/4
+            sigma = thresholdmJy*1e-3/nsigma
             imaging_parameters_nondefault[key]['sigma'] = sigma
-            imaging_parameters_nondefault[key]['threshold'] = {0: "{0:.3f}mJy".format(2e3*sigma), 1:"{0:.3f}mJy".format(2e3*sigma)}
-            imaging_parameters_nondefault[key]['niter']     = {0: 1000,  1:2000}
+            imaging_parameters_nondefault[key]['threshold'] = {0: "{0:.3f}mJy".format(2.0e3*sigma), 1:"{0:.3f}mJy".format(2.0e3*sigma)}
+            imaging_parameters_nondefault[key]['niter']     = {0: 6000,  1:12000}
             imaging_parameters_nondefault[key]['usemask']   = {0:'user', 1:'pb'}
             imaging_parameters_nondefault[key]['maskname']  = {0: maskname,1:''}
             imaging_parameters_nondefault[key]['pbmask']  = {0: 0.0,1:0.25}
@@ -119,8 +117,8 @@ if True:
             sigma = float(subprocess.check_output(['gethead','imaging_results/'+basename+'.fits','RMS']))
             #sigma = 1
             imaging_parameters_nondefault[key]['sigma'] = sigma
-            imaging_parameters_nondefault[key]['threshold'] = {0: "{0:.3f}mJy".format(2.5e3*sigma)}
-            imaging_parameters_nondefault[key]['niter']     = {0: 2000}
+            imaging_parameters_nondefault[key]['threshold'] = {0: "{0:.3f}mJy".format(2.0e3*sigma)}
+            imaging_parameters_nondefault[key]['niter']     = {0: 6000}
             imaging_parameters_nondefault[key]['usemask']   = {0:'pb'}
             imaging_parameters_nondefault[key]['maskname']  = {0: ''}
             imaging_parameters_nondefault[key]['pbmask']  = {0: 0.0,1:0.25}
@@ -138,21 +136,23 @@ for key in imaging_parameters_nondefault:
     imaging_parameters[key].update(imaging_parameters_nondefault[key])
 
 # Default sigma calculation for threshold
-images_for_sigma_estimation = glob.glob("imaging_results/*M_robust0.image.tt0.fits")
-for i in images_for_sigma_estimation:
-    (path,filename) = os.path.split(i)
-    auxiliar = filename.split('_')
-    field = auxiliar.pop(0)
-    band = auxiliar.pop(0)
-    array = auxiliar.pop(0)
-    robust_value = re.sub('robust([^\.]+).*','\\1',auxiliar.pop(0))
-    key = "{0}_{1}_{2}_robust{3}".format(field, band, array, robust_value)
-    if not 'threshold' in imaging_parameters[key]:
-        rms = float(subprocess.check_output(['gethead','RMS',i]))
-        imaging_parameters[key]['threshold'] = {0:"{0:.2f}mJy".format(rms*1000*2)}
+if False:
+    images_for_sigma_estimation = glob.glob("imaging_results/*M_robust0.image.tt0.fits")
+    for i in images_for_sigma_estimation:
+        (path,filename) = os.path.split(i)
+        auxiliar = filename.split('_')
+        field = auxiliar.pop(0)
+        band = auxiliar.pop(0)
+        array = auxiliar.pop(0)
+        robust_value = re.sub('robust([^\.]+).*','\\1',auxiliar.pop(0))
+        key = "{0}_{1}_{2}_robust{3}".format(field, band, array, robust_value)
+        if not 'threshold' in imaging_parameters[key]:
+            rms = float(subprocess.check_output(['gethead','RMS',i]))
+            # 2 sigma threshold
+            imaging_parameters[key]['threshold'] = {0:"{0:.2f}mJy".format(rms*1000*2)}
 
 
-sc_ip = copy.copy(imaging_parameters)
+sc_ip = copy.deepcopy(imaging_parameters)
 images = glob.glob("AIMF_AEG/reduction/clean_regions/*M_robust0.image.tt0_4.0sigma_*Jy")
 for mm in images:
     (path,filename) = os.path.split(mm)
@@ -174,17 +174,28 @@ for mm in images:
         match = re.match(r".*_([0-9\.]+)sigma.*",mm)
         nsigma = match.group(1)
         sc_ip[key]['maskname'][i] = mm
-        sc_ip[key]['niter'][i] = 2**(i+4)
-        sc_ip[key]['threshold'][i] = "{0:.3f}mJy".format(float(nsigma)*sc_ip[key]['sigma']*500.)
+        sc_ip[key]['niter'][i] = 2**(i+5)
+        # clean up to half the mask limit
+        sc_ip[key]['threshold'][i] = "{0:.3f}mJy".format(float(nsigma)*sc_ip[key]['sigma']*1000./2) 
         sc_ip[key]['usemask'][i] = 'user'
         sc_ip[key]['pbmask'][i] = 0.0
         i += 1
     
     sc_ip[key]['maskname'][i] = ''
-    sc_ip[key]['niter'][i] = 5000
+    sc_ip[key]['niter'][i] = 7000
+    # clean up to half the mask limit
     sc_ip[key]['threshold'][i] = "{0:.3f}mJy".format(sc_ip[key]['sigma']*2.e3)
     sc_ip[key]['usemask'][i] = 'pb'
     sc_ip[key]['pbmask'][i] = 0.25
+
+    i += 1
+    sc_ip[key]['maskname'][i] = ''
+    sc_ip[key]['niter'][i] = 7000
+    # clean up to half the mask limit
+    sc_ip[key]['threshold'][i] = "{0:.3f}mJy".format(sc_ip[key]['sigma']*2.e3)
+    sc_ip[key]['usemask'][i] = 'pb'
+    sc_ip[key]['pbmask'][i] = 0.25
+
 
 selfcal_imaging_pars = sc_ip
 """
@@ -203,10 +214,14 @@ for key in sc_ip.keys():
     if '7M' in key or not 'B6' in key:
         continue
     sc_p[key] = {}
-    for i in sc_ip[key]['threshold'].keys():
+    for i in sorted(sc_ip[key]['threshold'].keys())[1:]: # Starting in 1.
         sc_p[key][i] = copy.deepcopy(default_selfcal_pars)
-        if i>=1:
+        if i==1:
+            sc_p[key][i] = {"calmode": "p", "gaintype": "G", "solint": "inf", "solnorm": True}
+        if i>1:
             sc_p[key][i]['solint'] =  "{0}s".format(10+10*(max(sc_ip[key]['threshold'].keys())-i))
+        if i == max(sc_ip[key]['threshold'].keys()):
+            sc_p[key][i] = {"calmode": "ap", "gaintype": "T", "solint": "inf", "solnorm": True}
 
 selfcal_pars_custom = {
 #     "G343.1261-00.0623_B6_12M_robust-2": {
