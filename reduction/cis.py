@@ -78,7 +78,8 @@ for scp in selfcal_pars:
                 suffix = '_bsens' if dbs else ''
                 sms = sms.replace("selfcal.ms","selfcal"+suffix+".ms")
                 (directory,msfilename) = os.path.split(sms)     
-                caltable = re.sub('.*(uid.*)_selfcal\.ms','\\1_iter'+str(iteracion)+'_'+str(selfcal_pars[scp][iteracion]['solint'])+suffix+'.cal',msfilename)
+                caltable = re.sub('.*(uid.*)_selfcal\.ms','\\1_iter'+str(iteracion)+str(selfcal_pars[scp][iteracion]['calmode'])+
+                    '_'+str(selfcal_pars[scp][iteracion]['solint'])+suffix+'.cal',msfilename)
                 if dryRun:
                     logprint("Dry run. gaincal(vis={vis}, caltable={caltable},gaintable={gaintable}, {restofpars})".
                         format(vis = sms, caltable = caltable, gaintable = caltables[msfilename], restofpars=selfcal_pars[scp][iteracion]),origin="cis_script")
