@@ -12,3 +12,5 @@ export DO_BSENS_ONLY=True
 
 unset FIELD_ID
 export FIELD_ID="G337.40"
+
+printenv | egrep "ALMAIMF_ROOTDIR|EXCLUDE_7M|DO_BSENS|FIELD_ID"
