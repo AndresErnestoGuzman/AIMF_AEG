@@ -32,12 +32,13 @@ variables = ['imaging_parameters', 'from_cmd', 'image', 'almaimf_rootdir', 'excl
 variables.sort()
 logprint("Defined variables in preamble: "+','.join(variables))
 
-from fAEG import create_selfcal_ms_files, selfcal_name, check_model_column, sc_iter_image
+from fAEG import create_selfcal_ms_files, selfcal_name, check_model_column, sc_iter_image, rms_from_mad
 from imaging_parameters import selfcal_imaging_pars,  selfcal_pars
 
 # STAGE 2. DEFINE AND/OR CREATE SELFCAL MS FILES.
 
-selfcal_mses = create_selfcal_ms_files(mses=continuum_mses,vis_data=vis_image_parameters, eb_data=metadata['ebs'], arrayname=arrayname, do_bsens = do_bsens)
+selfcal_mses = create_selfcal_ms_files(mses=continuum_mses,vis_data=vis_image_parameters, 
+    eb_data=metadata['ebs'], arrayname=arrayname, do_bsens = do_bsens)
 selfcal_files_per_field = {}
 for band in bands:
     selfcal_files_per_field[band] = {}
@@ -46,10 +47,11 @@ for band in bands:
 
 # STAGE 3. DIRTY IMAGE. Skip, use continuum_imaging_AEG.py
 
-# STAGE 4 and 5. PRE-SELFCAL OR ITER 0. SHALLOW CLEAN.
-sc_iter_image(iteracion=0,arrayname=arrayname,selfcal_files_per_field=selfcal_files_per_field,do_bsens=do_bsens,
-    field_image_parameters=field_image_parameters,vis_image_parameters=vis_image_parameters,continuum_files_per_field=continuum_files_per_field,
-    selfcal_imaging_pars=selfcal_imaging_pars,imaging_root=imaging_root,dryRun = dryRun, savemodel='modelcolumn',datacolumn='data')
+# STAGE 4 and 5. PRE-SELFCAL OR ITER 0. SHALLOW CLEAN. DELETE MODEL COLUMN OF VISIBILITIES
+for dbs in do_bsens:
+    sc_iter_image(iteracion=0,arrayname=arrayname,selfcal_files_per_field=selfcal_files_per_field,do_bsens=dbs,
+        field_image_parameters=field_image_parameters,vis_image_parameters=vis_image_parameters,continuum_files_per_field=continuum_files_per_field,
+        selfcal_imaging_pars=selfcal_imaging_pars,imaging_root=imaging_root,dryRun = dryRun, savemodel='modelcolumn',datacolumn='data')
 
 #STAGE 5
 caltables = {}
@@ -57,38 +59,53 @@ for sms in selfcal_mses:
     (directory,msfilename) = os.path.split(sms)
     caltables[msfilename] = []
 
-for scp in selfcal_pars:
-    match = re.match(r"([^_]+)_(B[1-9]+)_([127]+M)_.*robust([^\._]+)",scp)
+def filtrar(st):
+    match = re.match(r"([^_]+)_(B[1-9]+)_([127]+M)_.*robust([^\._]+)",st)
+    return "_".join(match.group(1,2,3,4))
+auxdict = {v1:v2 for v1,v2 in zip(map(filtrar,selfcal_pars.keys()),selfcal_pars.keys())}
+filtered_keys = auxdict.keys()
+
+for scp in filtered_keys:
+    match = re.match(r"([^_]+)_(B[1-9]+)_([127]+M)_([^\._]+)",scp)
     if match:
         (field, band, array, robust) = match.group(1,2,3,4)
+        scp = re.sub(r'_([^_]+)$','_robust\\1',scp)
     else:
-        logprint("Unrecognized key in selfcal_pars", origin="cis_script")
-        raise Exception()
+        raise Exception("Unrecognized key in selfcal_pars")
     
     if not os.getenv('FIELD_ID') == None:
         if not field in set(os.getenv('FIELD_ID').split()):
             continue
 
-    for iteracion in sorted(selfcal_pars[scp].keys()):
-        if iteracion==0:
-            continue
-        # Next for is for all mses associated with the specific field
-        for sms in selfcal_files_per_field[band][field]:            
-            for dbs in do_bsens:
+    for dbs in do_bsens:
+        for iteracion in sorted(selfcal_pars[scp].keys()): # just iterations. Same number bsens and purest.
+            if iteracion==0:
+                continue
+            # Next for loop is for all mses associated with the specific field
+            for sms in selfcal_files_per_field[band][field]:            
+                
+                key = scp
                 suffix = '_bsens' if dbs else ''
                 sms = sms.replace("selfcal.ms","selfcal"+suffix+".ms")
                 (directory,msfilename) = os.path.split(sms)     
-                caltable = re.sub('.*(uid.*)_selfcal\.ms','\\1_iter'+str(iteracion)+str(selfcal_pars[scp][iteracion]['calmode'])+
-                    '_'+str(selfcal_pars[scp][iteracion]['solint'])+suffix+'.cal',msfilename)
+                
+                caltable = re.sub('.*(uid.*)_selfcal.*','\\1_iter'+str(iteracion)+str(selfcal_pars[key][iteracion]['calmode'])+
+                    '_'+str(selfcal_pars[key][iteracion]['solint'])+suffix+'.cal',msfilename)
+
+                if os.path.exists(caltable):
+                    logprint("Iteration={0}. Calibration table {1} already exist!. Using that one. Skipping this calibration iteration.".
+                        format(iteracion,caltable),origin="cis_script")
+                    continue
+
                 if dryRun:
                     logprint("Dry run. gaincal(vis={vis}, caltable={caltable},gaintable={gaintable}, {restofpars})".
-                        format(vis = sms, caltable = caltable, gaintable = caltables[msfilename], restofpars=selfcal_pars[scp][iteracion]),origin="cis_script")
+                        format(vis = sms, caltable = caltable, gaintable = caltables[msfilename], restofpars=selfcal_pars[key][iteracion]),origin="cis_script")
                 else:
                     logprint("gaincal. Iteration={0}".format(iteracion),origin="cis_script")
                     gaincal(vis = sms,
                         caltable = caltable,
                         gaintable = caltables[msfilename],
-                        **selfcal_pars[scp][iteracion])
+                        **selfcal_pars[key][iteracion])
                 
                 caltables[msfilename].append(caltable)
 
@@ -105,7 +122,23 @@ for scp in selfcal_pars:
                             applymode = 'calonly',
                             calwt = False)
 
-        sc_iter_image(iteracion = iteracion, arrayname = arrayname, bands = set([band]), fields=set([field]), selfcal_files_per_field = selfcal_files_per_field, do_bsens = do_bsens, 
-            field_image_parameters = field_image_parameters, vis_image_parameters = vis_image_parameters, continuum_files_per_field = continuum_files_per_field, 
-            selfcal_imaging_pars = selfcal_imaging_pars, imaging_root = imaging_root, dryRun = dryRun, savemodel = 'modelcolumn', datacolumn = 'corrected')
-           
+            imagenames = sc_iter_image(iteracion = iteracion, arrayname = arrayname, bands = set([band]), fields=set([field]), selfcal_files_per_field = selfcal_files_per_field,
+                do_bsens = dbs, field_image_parameters = field_image_parameters, vis_image_parameters = vis_image_parameters, continuum_files_per_field = continuum_files_per_field, 
+                selfcal_imaging_pars = selfcal_imaging_pars, imaging_root = imaging_root, dryRun = dryRun, savemodel = 'modelcolumn', datacolumn = 'corrected')
+
+            if len(imagenames)>1:
+                raise Exception("imagenames should be size one list in this case")
+
+            
+            # MOAR CLEAN in LAST ITERATION
+            if iteracion == max(map(int,sorted(selfcal_pars[scp].keys()))) and not dryRun:
+                logprint("MOAR CLEAN.", origin='cis_script')
+                last_iter_imaging_pars = {scp: selfcal_imaging_pars[scp]}
+                rms = rms_from_mad(imagenames[0]+".image.tt0")
+                last_iter_imaging_pars[scp]['threshold'][iteracion] = "{0:.2f}mJy".format(2500*rms)
+                sc_iter_image(iteracion = iteracion, arrayname = arrayname, bands = set([band]), fields=set([field]), selfcal_files_per_field = selfcal_files_per_field,
+                    do_bsens = dbs, field_image_parameters = field_image_parameters, vis_image_parameters = vis_image_parameters, 
+                    continuum_files_per_field = continuum_files_per_field, selfcal_imaging_pars = last_iter_imaging_pars, imaging_root = imaging_root, 
+                    dryRun = dryRun, savemodel = 'none', datacolumn = 'corrected')
+
+            logprint("Done imaging of {0}, iteration={1} of {2}".format(imagenames[0],iteration, max(map(int,sorted(selfcal_pars[scp].keys())))), origin="cis_scrip")

@@ -21,6 +21,7 @@ st = synthesisutils()
 tb = tbtool()
 ia = iatool()
 
+
 def explodeKey(string):
     match = re.match(r"(.*?/?)((?P<field>[^/_]+)_(?P<band>B[1-9]+)_(?P<array>[127M]+)_?(?P<bsens>bsens)?_robust(?P<robustNumber>[0-9]+).*)",string)
     if match:

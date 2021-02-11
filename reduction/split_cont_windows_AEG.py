@@ -151,11 +151,15 @@ if True:
 #  Purest continuum line flags.
 if True:
     for visi in visibilities_to_average_continuum:
+        
         flagmanager(vis = visi, mode='delete', versionname='before_line_flags')
         flagmanager(vis = visi, mode='save'  , versionname='before_line_flags') # 
         (visi_path, visi_filename) = os.path.split(visi)
         eb = re.sub('.*(uid[^.]+).*','\\1',visi_filename)
         fields_to_average_for_continuum = set(metadata['ebs'][eb]['fields']) & fields
+        
+        ms.open(visi)
+        
         for field in fields_to_average_for_continuum:
             for band in bands:
                 if field in metadata[band]:
@@ -175,8 +179,9 @@ if True:
                     logprint("Using file {0} to define continuum in {1}.".format(contdatfile,visi))
                     cont_channel_selection = parse_contdotdat(contfile)
                     freqs = {}
-                    for spw, spwlim in zip(spws,frqlimsLSRK):
-                        freqs[spw] = spwlim
+                    for spw  in spws:
+                        freqs[spw] = ms.cvelfreqs(spwids=[spw], outframe='LSRK')
+
                     linechannels, linefracs = contchannels_to_linechannels(cont_channel_selection,
                                                                 freqs,
                                                                 return_fractions=True)
@@ -188,7 +193,10 @@ if True:
                             spw = linechannels, 
                             flagbackup = False)
                 else:
-                        logprint("No metadata associated with field {0} in {1}. Skipping.".format(field,band))                   
+                        logprint("No metadata associated with field {0} in {1}. Skipping.".format(field,band))
+
+        ms.close()
+        flagmanager(vis = visi, mode = 'delete', versionname = 'line_channel_flags')
         flagmanager(vis = visi, mode = 'save', versionname = 'line_channel_flags')
                     
 # Splitting Purest continuum. Unflag lines in original files.

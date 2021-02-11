@@ -1,5 +1,6 @@
 import numpy as np
 import string
+import re
 try:
     from __casac__.quanta import quanta
     from taskinit import msmdtool
@@ -59,7 +60,7 @@ def contchannels_to_linechannels(contsel, freqslist, return_fractions=False):
                 flo,fhi = fhi,flo
 
             # only include selections that are at least partly in range
-            if flo < fhi < fmax or fmax > flo > fmin:
+            if fmin < fhi < fmax or fmax > flo > fmin:
                 selected |= (freq > flo) & (freq < fhi)
             # but also allow for the case where EVERYTHING is included
             elif fhi > fmax and flo < fmin:

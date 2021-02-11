@@ -2,9 +2,24 @@
 from metadata_tools import determine_imsize, determine_phasecenter, logprint, explodeKey
 import re, os, math, copy, numpy
 from taskinit import msmdtool, iatool, tbtool, mstool
-from tasks import tclean, exportfits, imstat, imhead, rmtables, split
+from tasks import tclean, exportfits, imstat, imhead, rmtables, split, delmod
 from utils import validate_mask_path
 
+
+def rms_from_mad(imagename):
+        stats = imstat(imagename=imagename,algorithm='hinged-fences',fence=2)
+        mad = stats['medabsdevmed'][0]
+        rms  = 1.4826* mad
+        return(rms)
+
+
+def selfcal_name(ms, arrayname, field, band, bsens=False):
+    (directory,msfilename) = os.path.split(ms)
+    suffix = "_bsens" if bsens else ""
+    scbasename = re.sub('(.+X[^X\.]+).*','\\1',msfilename)
+    scms = "{uid}_{fi}_{band}_{arr}_selfcal{suffix}.ms".format(uid=scbasename,arr=arrayname,suffix=suffix,fi=field,band=band)
+    scms = os.path.join(directory,scms)
+    return scms
 
 class UniversalSet(set):
     def __and__(self, other):
@@ -40,7 +55,7 @@ def sc_image(visibilities, cell, field, band, arrayname, robust,imsize, antennae
             impars['mask'] = maskname
 
     if imagename==None:
-        imname = os.path.join(imaging_root, field) +"_"+ band +"_" + arrayname + suffix+"_robust{0}".format(robust)
+        imname = os.path.join(imaging_root, field +"_"+ band +"_" + arrayname + "_" + suffix+"robust{0}".format(robust))
     else:
         imname = imagename
 
@@ -70,6 +85,10 @@ def sc_image(visibilities, cell, field, band, arrayname, robust,imsize, antennae
                                 phasecenter = phasecenter, outframe = 'LSRK', veltype = 'radio', interactive = False,    
                                 cell = cell, imsize = imsize, antennae = antennae, pbcor = True, savemodel = savemodel,    
                                 datacolumn = datacolumn)+','.join([kk+"="+str(impars[kk]) for kk in impars.keys()])+")",origin='sc_image_function')
+        for visi in visibilities:
+            if not os.path.exists(visi):
+                logprint("{0} does not exists!. Terminating dry run".format(visi),origin='sc_image_function')
+                raise Exception("{0} does not exists!. Terminating dry run".format(visi))        
     else:
         tcleanargs = getattr(tclean,'parameters').keys()
         difargs = set(impars.keys()) - set(tcleanargs)
@@ -109,6 +128,7 @@ def sc_image(visibilities, cell, field, band, arrayname, robust,imsize, antennae
 
 def sc_iter_image(iteracion,arrayname,selfcal_files_per_field,do_bsens, field_image_parameters,vis_image_parameters,continuum_files_per_field,selfcal_imaging_pars,imaging_root,dryRun ,savemodel,datacolumn,fields=UniversalSet(), bands=UniversalSet()):
     
+    imagenames = []
     bands = set(selfcal_files_per_field.keys()) & bands
     for band in bands:
         fields = set(selfcal_files_per_field[band].keys()) & fields
@@ -116,35 +136,45 @@ def sc_iter_image(iteracion,arrayname,selfcal_files_per_field,do_bsens, field_im
             fields = fields & set(os.getenv('FIELD_ID').split())
         logprint("Doing band {band} images for fields {fields}".format(band=band,fields=", ".join(list(fields))), origin='sc_iter_image')
         for field in fields:
-            for dbs in do_bsens:
-                suffix = "_bsens" if dbs else ""
-                phasecenter = field_image_parameters[band][field]['phasecenter'][0]
-                antennae = [vis_image_parameters[vis][arrayname+'_antennae'] for vis in continuum_files_per_field[band][field]]
-                selfcal_visibilities = [x.replace(".ms",suffix+".ms") for x in selfcal_files_per_field[band][field]]
-                imsize = field_image_parameters[band][field]['imsize']
-                cell = field_image_parameters[band][field]['cellsize']
+            dbs = do_bsens
+            suffix = "_bsens" if dbs else ""
+            phasecenter = field_image_parameters[band][field]['phasecenter'][0]
+            antennae = [vis_image_parameters[vis][arrayname+'_antennae'] for vis in continuum_files_per_field[band][field]]
 
-                for robust in [0]:
-                    key = "{0}_{1}_{2}_robust{3}".format(field, band,arrayname,robust)
-                    selfcal_imaging_pars_thisiter = select_iter(selfcal_imaging_pars[key],iteracion)
+            selfcal_visibilities = [x.replace("selfcal.ms","selfcal"+suffix+".ms") for x in selfcal_files_per_field[band][field]]
+            
+            imsize = field_image_parameters[band][field]['imsize']
+            cell = field_image_parameters[band][field]['cellsize']
 
-                    imname = os.path.join(imaging_root, field) +"_"+ band +"_" + arrayname + suffix+"_robust{0}_selfcal{1}".format(robust,iteracion)
-                    if iteracion==0:
-                        selfcal_imaging_pars_thisiter['startmodel'] = ''
-                    else:
-                        selfcal_imaging_pars_thisiter['startmodel'] = [imname.replace("selfcal"+str(iteracion),"selfcal"+str(iteracion-1))+".model.tt"+str(ttn) for ttn in [0,1]]
+            for robust in [0]:
+                key = "{0}_{1}_{2}_robust{3}".format(field, band,arrayname,robust)
+                keybs = "{0}_{1}_{2}_bsens_robust{3}".format(field, band,arrayname,robust)
+                if dbs and (keybs in selfcal_imaging_pars):
+                    key = keybs
 
-                    if os.path.exists(imname):
-                        logprint("Image {0} already exists. Skip redoing image.".format(os.path.split(imname)[1]),origin='sc_iter_image')
-                    else:
-                        logprint("Doing selfcal. {0} image.".format(os.path.split(imname)[1]),origin='sc_iter_image')
-                        sc_image(visibilities=selfcal_visibilities, cell=cell, field=field, band=band, arrayname=arrayname, robust=robust, imaging_root=imaging_root,
-                                imsize=imsize, antennae = antennae, phasecenter=phasecenter, suffix=suffix, imaging_parameters = selfcal_imaging_pars_thisiter, dryrun = dryRun,
-                                savemodel=savemodel,datacolumn=datacolumn,imagename=imname)
+                selfcal_imaging_pars_thisiter = select_iter(selfcal_imaging_pars[key],iteracion)
 
-                    if not dryRun and iteracion==0:
-                        if all(check_model_column(vis=selfcal_visibilities)):
-                            logprint("Model column populated from previous selfcal step.",origin='sc_iter_image_check_model_column')
+                imname = os.path.join(imaging_root, field) +"_"+ band +"_" + arrayname + suffix+"_robust{0}_selfcal{1}".format(robust,iteracion)
+                imagenames.append(imname)
+                if iteracion==0 or os.path.exists(imname+".image.tt0"):
+                    selfcal_imaging_pars_thisiter['startmodel'] = ''
+                    for vv in selfcal_visibilities:
+                        delmod(vis=vv)
+                else:
+                    selfcal_imaging_pars_thisiter['startmodel'] = [imname.replace("selfcal"+str(iteracion),"selfcal"+str(iteracion-1))+".model.tt"+str(ttn) for ttn in [0,1]]
+
+                if os.path.exists(imname+".image.tt0"):
+                    logprint("Image {0} already exists. Starting from this one.".format(os.path.split(imname)[1]),origin='sc_iter_image')
+                
+                logprint("Doing selfcal. {0} image.".format(os.path.split(imname)[1]),origin='sc_iter_image')
+                sc_image(visibilities=selfcal_visibilities, cell=cell, field=field, band=band, arrayname=arrayname, robust=robust, imaging_root=imaging_root,
+                        imsize=imsize, antennae = antennae, phasecenter=phasecenter, suffix=suffix, imaging_parameters = selfcal_imaging_pars_thisiter, dryrun = dryRun,
+                        savemodel=savemodel,datacolumn=datacolumn,imagename=imname)
+
+                if (not dryRun) and iteracion==0:
+                    if all(check_model_column(vis=selfcal_visibilities)):
+                        logprint("Model column populated from previous selfcal step.",origin='sc_iter_image_check_model_column')
+    return(imagenames)
 
 def select_iter(dictionary,i):
     rr = {}
@@ -186,14 +216,6 @@ def check_model_column(vis):
         rr.append(True)
     return rr
 
-def selfcal_name(ms, arrayname, field, band, bsens=False):
-    (directory,msfilename) = os.path.split(ms)
-    suffix = "_bsens" if bsens else ""
-    scbasename = re.sub('(.+X[^X\.]+).*','\\1',msfilename)
-    scms = "{uid}_{fi}_{band}_{arr}_selfcal{suffix}.ms".format(uid=scbasename,arr=arrayname,suffix=suffix,fi=field,band=band)
-    scms = os.path.join(directory,scms)
-    return scms
-
 def create_selfcal_ms_files(mses, arrayname, vis_data,eb_data, do_bsens=[False]):
     selfcal_mses = []
     tb = tbtool()
@@ -203,8 +225,10 @@ def create_selfcal_ms_files(mses, arrayname, vis_data,eb_data, do_bsens=[False])
         fields = eb_data[ebname]['fields']
         band = eb_data[ebname]['band']
         for dbs in do_bsens:
+            suffix  = '_bsens' if dbs else ''
+            visi = cms.replace("split.cal.cont","split.cal"+suffix+".cont")
             for field in fields:
-                scms = selfcal_name(ms=cms,arrayname=arrayname,field=field, band=band,bsens=dbs)
+                scms = selfcal_name(ms = visi, arrayname = arrayname, field = field, band = band, bsens = dbs)
                 
                 # for key in selfcal_mses_data[scms].keys():
                 #     if 'antennae' in key and not key==arrayname+'_antennae':
@@ -214,13 +238,13 @@ def create_selfcal_ms_files(mses, arrayname, vis_data,eb_data, do_bsens=[False])
                     logprint("Selfcal MS {0} already exists. Using that one.".format(scms),origin='create_selfcal_ms_files')
                 else:
                     logprint("Selfcal MS {0} does not exists. Splitting a new one.".format(scms),origin='create_selfcal_ms_files')
-                    tb.open(cms)
+                    tb.open(visi)
                     if 'CORRECTED_DATA' in tb.colnames():
                         datacolumn='corrected'
                     else:
                         datacolumn='data'
                     tb.close()
-                    split(  vis = cms,
+                    split(  vis = visi,
                             outputvis = scms,
                             datacolumn = datacolumn,
                             antenna = vis_data[cms][arrayname+'_antennae'],
@@ -228,7 +252,7 @@ def create_selfcal_ms_files(mses, arrayname, vis_data,eb_data, do_bsens=[False])
                             #width = width,
                             field = field,
                             )
-                    logprint("Created new selfcal MS: {0}".format(scms), origin='create_selfcal_ms_files')
+                    logprint("Created new selfcal MS: {0} from {1}".format(scms, visi), origin='create_selfcal_ms_files')
                 selfcal_mses.append(scms)
     return selfcal_mses
 

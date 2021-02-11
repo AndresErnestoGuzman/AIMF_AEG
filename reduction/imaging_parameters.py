@@ -52,8 +52,8 @@ else:
 allfields = set()
 for band in set(metadata.keys()).difference({'fields','ebs'}):
     allfields = allfields | set(str(x) for x in metadata[band])
-# if 'FIELD_ID' in os.environ:
-#     allfields = allfields & set(os.getenv('FIELD_ID').split())
+if 'FIELD_ID' in os.environ:
+    allfields = allfields & set(os.getenv('FIELD_ID').split())
 print allfields
 
 # set up global defaults. Mainly for 
@@ -88,13 +88,15 @@ for key in imaging_parameters:
 imaging_parameters_nondefault = {}
 
 if True:
-    mascaras = glob.glob("AIMF_AEG/reduction/clean_regions/*M_robust0.image.tt0_4.0sigma_*Jy")
+    mascaras = glob.glob("AIMF_AEG/reduction/clean_regions/*M_robust0_dirty.image.tt0_4.0sigma_*Jy")
     #re.sub('.*(uid[^.]+).*','\\1',os.path.split(continuum_ms)[1])
     for mm in mascaras:
         (path,filename) = os.path.split(mm)
         match = re.match(r"([^_]+)_(B[1-9]+)_([127]+M)_.*(robust[^\._]+).*\.image\.tt0",filename)
         basename = match.group(0)
         (field, band, array, robust) = match.group(1,2,3,4)
+        if field not in allfields:
+            continue
         key = '_'.join(match.group(1,2,3,4))
         imaging_parameters_nondefault[key] = {}
 
@@ -151,199 +153,204 @@ if False:
             # 2 sigma threshold
             imaging_parameters[key]['threshold'] = {0:"{0:.2f}mJy".format(rms*1000*2)}
 
+if True:
+    sc_ip = copy.deepcopy(imaging_parameters)
+    images = glob.glob("AIMF_AEG/reduction/clean_regions/*M_robust0.image.tt0_4.0sigma_*Jy")
+    for mm in images:
+        (path,filename) = os.path.split(mm)
+        match = re.match(r"([^_]+)_(B[1-9]+)_([127]+M)_.*(robust[^\._]+).*\.image\.tt0",filename)
+        basename = match.group(0)
+        (field, band, array, robust) = match.group(1,2,3,4)
+        if field not in allfields:
+            continue
+        for bs in [True,False]:
+            key = '_'.join([field, band, array, 'bsens',robust]) if bs else '_'.join([field, band, array, robust])
+            #imaging_parameters_nondefault[key] = {}
+            if bs:
+                sc_ip[key] = copy.deepcopy(sc_ip[key.replace('_bsens','')])
 
-sc_ip = copy.deepcopy(imaging_parameters)
-images = glob.glob("AIMF_AEG/reduction/clean_regions/*M_robust0.image.tt0_4.0sigma_*Jy")
-for mm in images:
-    (path,filename) = os.path.split(mm)
-    match = re.match(r"([^_]+)_(B[1-9]+)_([127]+M)_.*(robust[^\._]+).*\.image\.tt0",filename)
-    basename = match.group(0)
-    (field, band, array, robust) = match.group(1,2,3,4)
-    key = '_'.join(match.group(1,2,3,4))
-    imaging_parameters_nondefault[key] = {}
+            masknames = glob.glob("AIMF_AEG/reduction/clean_regions/"+basename+"*sigma*Jy")
+            masknames.sort(reverse=True)
+            sc_ip[key]['maskname'] = {}
+            sc_ip[key]['niter'] = {}
+            sc_ip[key]['threshold'] = {}
+            sc_ip[key]['usemask'] = {}
+            sc_ip[key]['pbmask'] = {}
+            i = 0
+            for mm in masknames:
+                match = re.match(r".*_([0-9\.]+)sigma.*",mm)
+                nsigma = match.group(1)
+                sc_ip[key]['maskname'][i] = mm
+                sc_ip[key]['niter'][i] = 2**(i+5)
+                # clean up to half the mask limit
+                sc_ip[key]['threshold'][i] = "{0:.3f}mJy".format(float(nsigma)*sc_ip[key]['sigma']*1000./2) 
+                sc_ip[key]['usemask'][i] = 'pb' if bs else 'user' 
+                sc_ip[key]['pbmask'][i] = 0.25 if bs else 0.0
+                i += 1
+            
+            sc_ip[key]['maskname'][i] = ''
+            sc_ip[key]['niter'][i] = 7000
+            # clean up to half the mask limit
+            sc_ip[key]['threshold'][i] = "{0:.3f}mJy".format(sc_ip[key]['sigma']*2.e3)
+            sc_ip[key]['usemask'][i] = 'pb'
+            sc_ip[key]['pbmask'][i] = 0.25
 
-    masknames = glob.glob("AIMF_AEG/reduction/clean_regions/"+basename+"*sigma*Jy")
-    masknames.sort(reverse=True)
-    sc_ip[key]['maskname'] = {}
-    sc_ip[key]['niter'] = {}
-    sc_ip[key]['threshold'] = {}
-    sc_ip[key]['usemask'] = {}
-    sc_ip[key]['pbmask'] = {}
-    i = 0
-    for mm in masknames:
-        match = re.match(r".*_([0-9\.]+)sigma.*",mm)
-        nsigma = match.group(1)
-        sc_ip[key]['maskname'][i] = mm
-        sc_ip[key]['niter'][i] = 2**(i+5)
-        # clean up to half the mask limit
-        sc_ip[key]['threshold'][i] = "{0:.3f}mJy".format(float(nsigma)*sc_ip[key]['sigma']*1000./2) 
-        sc_ip[key]['usemask'][i] = 'user'
-        sc_ip[key]['pbmask'][i] = 0.0
-        i += 1
-    
-    sc_ip[key]['maskname'][i] = ''
-    sc_ip[key]['niter'][i] = 7000
-    # clean up to half the mask limit
-    sc_ip[key]['threshold'][i] = "{0:.3f}mJy".format(sc_ip[key]['sigma']*2.e3)
-    sc_ip[key]['usemask'][i] = 'pb'
-    sc_ip[key]['pbmask'][i] = 0.25
-
-    i += 1
-    sc_ip[key]['maskname'][i] = ''
-    sc_ip[key]['niter'][i] = 7000
-    # clean up to half the mask limit
-    sc_ip[key]['threshold'][i] = "{0:.3f}mJy".format(sc_ip[key]['sigma']*2.e3)
-    sc_ip[key]['usemask'][i] = 'pb'
-    sc_ip[key]['pbmask'][i] = 0.25
-
-
-selfcal_imaging_pars = sc_ip
-"""
-Self-calibration parameters are defined here
-"""
-
-default_selfcal_pars = {
-        "solint": "inf",
-        "gaintype": "T",
-        "solnorm": True,
-        # 'combine': 'spw', # consider combining across spw bounds
-        "calmode": "p",}
-
-sc_p = {}
-for key in sc_ip.keys():
-    if '7M' in key or not 'B6' in key:
-        continue
-    sc_p[key] = {}
-    for i in sorted(sc_ip[key]['threshold'].keys())[1:]: # Starting in 1.
-        sc_p[key][i] = copy.deepcopy(default_selfcal_pars)
-        if i==1:
-            sc_p[key][i] = {"calmode": "p", "gaintype": "G", "solint": "inf", "solnorm": True}
-        if i>1:
-            sc_p[key][i]['solint'] =  "{0}s".format(10+10*(max(sc_ip[key]['threshold'].keys())-i))
-        if i == max(sc_ip[key]['threshold'].keys()):
-            sc_p[key][i] = {"calmode": "ap", "gaintype": "T", "solint": "inf", "solnorm": True}
-
-selfcal_pars_custom = {
-#     "G343.1261-00.0623_B6_12M_robust-2": {
-#         1: {"calmode": "p", "gaintype": "T", "solint": "inf", "solnorm": True},
-#         2: {"calmode": "p", "gaintype": "T", "solint": "inf", "solnorm": True},
-#         3: {"calmode": "p", "gaintype": "T", "solint": "inf", "solnorm": True},
-#         4: {"calmode": "p", "gaintype": "T", "solint": "inf", "solnorm": True},
-#     },
- 
-}
+            i += 1
+            sc_ip[key]['maskname'][i] = ''
+            sc_ip[key]['niter'][i] = 7000
+            # clean up to half the mask limit
+            sc_ip[key]['threshold'][i] = "{0:.3f}mJy".format(sc_ip[key]['sigma']*2.e3)
+            sc_ip[key]['usemask'][i] = 'pb'
+            sc_ip[key]['pbmask'][i] = 0.25
 
 
-selfcal_pars = sc_p.copy()
-for key in selfcal_pars_custom:
-    for iternum in selfcal_pars_custom[key]:
-        if iternum in selfcal_pars[key]:
-            selfcal_pars[key][iternum].update(selfcal_pars_custom[key][iternum])
-        else:
-            selfcal_pars[key][iternum] = selfcal_pars_custom[key][iternum]
+    selfcal_imaging_pars = sc_ip
+    """
+    Self-calibration parameters are defined here
+    """
 
-## LINE STUFF
+    default_selfcal_pars = {
+            "solint": "inf",
+            "gaintype": "T",
+            "solnorm": True,
+            # 'combine': 'spw', # consider combining across spw bounds
+            "calmode": "p",}
 
-# line_imaging_parameters_default = {
-#     "{0}_{1}_{2}_robust{3}{4}".format(field, band, array, robust, contsub): {
-#         "niter": 5000000,
-#         "threshold": "5sigma",
-#         "robust": robust,
-#         "weighting": "briggs",
-#         "deconvolver": "hogbom",
-#         # "scales": [0, 3, 9, 27, 81],
-#         # "nterms": 1,
-#         "gridder": "mosaic",
-#         "specmode": "cube",
-#         "outframe": "LSRK",
-#         "veltype": "radio",
-#         "usemask": "pb",
-#         "pblimit": 0.05,
-#         "pbmask": 0.1,
-#         "perchanweightdensity": False,
-#         "interactive": False,
-#         "mask_out_endchannels": 2,
-#     }
-#     for field in allfields
-#     for band in ("B3", "B6")
-#     for array in ("12M", "7M12M", "7M")
-#     # for robust in (0,)
-#     for robust in [0]
-#     for contsub in ("", "_contsub")
-# }
+    sc_p = {}
+    for key in sc_ip.keys():
+        if '7M' in key or not 'B6' in key:
+            continue
+        sc_p[key] = {}
+        for i in sorted(sc_ip[key]['threshold'].keys())[1:]: # Starting in 1.
+            sc_p[key][i] = copy.deepcopy(default_selfcal_pars)
+            if i==1:
+                sc_p[key][i] = {"calmode": "p", "gaintype": "G", "solint": "inf", "solnorm": True}
+            if i>1:
+                sc_p[key][i]['solint'] =  "{0}s".format(10+10*(max(sc_ip[key]['threshold'].keys())-i))
+            if i == max(sc_ip[key]['threshold'].keys()):
+                sc_p[key][i] = {"calmode": "ap", "gaintype": "T", "solint": "inf", "solnorm": True}
 
-# line_imaging_parameters = copy.deepcopy(line_imaging_parameters_default)
-
-# line_imaging_parameters_custom = {
- 
-#     "G343.1261-00.0623_B3_12M_robust0": {
-#         "threshold": "6mJy",
-#         # "startmodel": "G343.1261-00.0623_B3_uid___A001_X1296_X1e9_continuum_merged_12M_robust0_selfcal5_finaliter",
-#         # UF machine has 1e9 instead of 1e5 as of 10/14/2020 - this may change
-#         "startmodel": "G343.1261-00.0623_B3_uid___A001_X1296_X1e5_continuum_merged_12M_robust0_selfcal7_finaliter",
-#     },
-#     "G343.1261-00.0623_B3_12M_robust0_contsub": {  # More restrictive params for bright emission
-#         "usemask": "auto-multithresh",
-#         "noisethreshold": 4.2,
-#         "sidelobethreshold": 2.5,
-#         "negativethreshold": 15.0,
-#         "minbeamfrac": 0.3,
-#         "dogrowprune": True,
-#         "threshold": "6mJy",
-#     },
-#     "G343.1261-00.0623_B6_12M_robust0": {
-#         "threshold": "6mJy",
-#         # "startmodel": "G343.1261-00.0623_B6_uid___A001_X1296_X1df_continuum_merged_12M_robust0_selfcal5_finaliter",
-#         # UF machine has 1db instead of 1df as of 10/16/2020 - this may change
-#         "startmodel": "G343.1261-00.0623_B6_uid___A001_X1296_X1db_continuum_merged_12M_robust0_selfcal5_finaliter",
-#     }
-# }
+    selfcal_pars_custom = {
+    #     "G343.1261-00.0623_B6_12M_robust-2": {
+    #         1: {"calmode": "p", "gaintype": "T", "solint": "inf", "solnorm": True},
+    #         2: {"calmode": "p", "gaintype": "T", "solint": "inf", "solnorm": True},
+    #         3: {"calmode": "p", "gaintype": "T", "solint": "inf", "solnorm": True},
+    #         4: {"calmode": "p", "gaintype": "T", "solint": "inf", "solnorm": True},
+    #     },
+     
+    }
 
 
-# for key in line_imaging_parameters_custom:
-#     if key in line_imaging_parameters:
-#         line_imaging_parameters[key].update(line_imaging_parameters_custom[key])
-#     else:
-#         line_imaging_parameters[key] = line_imaging_parameters_custom[key]
+    selfcal_pars = sc_p.copy()
+    for key in selfcal_pars_custom:
+        for iternum in selfcal_pars_custom[key]:
+            if iternum in selfcal_pars[key]:
+                selfcal_pars[key][iternum].update(selfcal_pars_custom[key][iternum])
+            else:
+                selfcal_pars[key][iternum] = selfcal_pars_custom[key][iternum]
 
-# default_lines = {
-#     "n2hp": "93.173700GHz",
-#     "sio": "217.104984GHz",
-#     "h2co303": "218.222195GHz",
-#     "12co": "230.538GHz",
-#     "13cs": "231.22068520GHz",
-#     "h30a": "231.900928GHz",
-#     "h41a": "92.034434GHz",
-#     "c18o": "219.560358GHz",
-#     "ch3cn": "92.26144GHz",
-#     "ch3cch": "102.547983GHz",
-# }
-# field_vlsr = {
-#     "G343.1261-00.0623": "-2km/s",
-# }
-# # line parameters are converted by line_imaging.py into tclean parameters
-# line_parameters_default = {
-#     field: {
-#         line: {"restfreq": freq, "vlsr": field_vlsr[field], "cubewidth": "50km/s"}
-#         for line, freq in default_lines.items()
-#     }
-#     for field in allfields
-# }
-# for field in allfields:
-#     line_parameters_default[field]["12co"]["cubewidth"] = "150km/s"
-#     line_parameters_default[field]["ch3cn"]["cubewidth"] = "150km/s"  # is 150 wide enough?
-# line_parameters = copy.deepcopy(line_parameters_default)
+    ## LINE STUFF
 
-# line_parameters_custom = {
- 
-#     "G343.1261-00.0623": {
-#         "12co": {"cubewidth": "150km/s"},
-#         "ch3cn": {"cubewidth": "150km/s"},
-#         "h41a": {"cubewidth": "120km/s", "vlsr": "0km/s", "width": "2km/s"},
-#         "n2hp": {"cubewidth": "60km/s"},
-#     }
-# }
+    # line_imaging_parameters_default = {
+    #     "{0}_{1}_{2}_robust{3}{4}".format(field, band, array, robust, contsub): {
+    #         "niter": 5000000,
+    #         "threshold": "5sigma",
+    #         "robust": robust,
+    #         "weighting": "briggs",
+    #         "deconvolver": "hogbom",
+    #         # "scales": [0, 3, 9, 27, 81],
+    #         # "nterms": 1,
+    #         "gridder": "mosaic",
+    #         "specmode": "cube",
+    #         "outframe": "LSRK",
+    #         "veltype": "radio",
+    #         "usemask": "pb",
+    #         "pblimit": 0.05,
+    #         "pbmask": 0.1,
+    #         "perchanweightdensity": False,
+    #         "interactive": False,
+    #         "mask_out_endchannels": 2,
+    #     }
+    #     for field in allfields
+    #     for band in ("B3", "B6")
+    #     for array in ("12M", "7M12M", "7M")
+    #     # for robust in (0,)
+    #     for robust in [0]
+    #     for contsub in ("", "_contsub")
+    # }
 
-# for field in line_parameters_custom:
-#     for line in line_parameters_custom[field]:
-#         line_parameters[field][line].update(line_parameters_custom[field][line])
+    # line_imaging_parameters = copy.deepcopy(line_imaging_parameters_default)
+
+    # line_imaging_parameters_custom = {
+     
+    #     "G343.1261-00.0623_B3_12M_robust0": {
+    #         "threshold": "6mJy",
+    #         # "startmodel": "G343.1261-00.0623_B3_uid___A001_X1296_X1e9_continuum_merged_12M_robust0_selfcal5_finaliter",
+    #         # UF machine has 1e9 instead of 1e5 as of 10/14/2020 - this may change
+    #         "startmodel": "G343.1261-00.0623_B3_uid___A001_X1296_X1e5_continuum_merged_12M_robust0_selfcal7_finaliter",
+    #     },
+    #     "G343.1261-00.0623_B3_12M_robust0_contsub": {  # More restrictive params for bright emission
+    #         "usemask": "auto-multithresh",
+    #         "noisethreshold": 4.2,
+    #         "sidelobethreshold": 2.5,
+    #         "negativethreshold": 15.0,
+    #         "minbeamfrac": 0.3,
+    #         "dogrowprune": True,
+    #         "threshold": "6mJy",
+    #     },
+    #     "G343.1261-00.0623_B6_12M_robust0": {
+    #         "threshold": "6mJy",
+    #         # "startmodel": "G343.1261-00.0623_B6_uid___A001_X1296_X1df_continuum_merged_12M_robust0_selfcal5_finaliter",
+    #         # UF machine has 1db instead of 1df as of 10/16/2020 - this may change
+    #         "startmodel": "G343.1261-00.0623_B6_uid___A001_X1296_X1db_continuum_merged_12M_robust0_selfcal5_finaliter",
+    #     }
+    # }
+
+
+    # for key in line_imaging_parameters_custom:
+    #     if key in line_imaging_parameters:
+    #         line_imaging_parameters[key].update(line_imaging_parameters_custom[key])
+    #     else:
+    #         line_imaging_parameters[key] = line_imaging_parameters_custom[key]
+
+    # default_lines = {
+    #     "n2hp": "93.173700GHz",
+    #     "sio": "217.104984GHz",
+    #     "h2co303": "218.222195GHz",
+    #     "12co": "230.538GHz",
+    #     "13cs": "231.22068520GHz",
+    #     "h30a": "231.900928GHz",
+    #     "h41a": "92.034434GHz",
+    #     "c18o": "219.560358GHz",
+    #     "ch3cn": "92.26144GHz",
+    #     "ch3cch": "102.547983GHz",
+    # }
+    # field_vlsr = {
+    #     "G343.1261-00.0623": "-2km/s",
+    # }
+    # # line parameters are converted by line_imaging.py into tclean parameters
+    # line_parameters_default = {
+    #     field: {
+    #         line: {"restfreq": freq, "vlsr": field_vlsr[field], "cubewidth": "50km/s"}
+    #         for line, freq in default_lines.items()
+    #     }
+    #     for field in allfields
+    # }
+    # for field in allfields:
+    #     line_parameters_default[field]["12co"]["cubewidth"] = "150km/s"
+    #     line_parameters_default[field]["ch3cn"]["cubewidth"] = "150km/s"  # is 150 wide enough?
+    # line_parameters = copy.deepcopy(line_parameters_default)
+
+    # line_parameters_custom = {
+     
+    #     "G343.1261-00.0623": {
+    #         "12co": {"cubewidth": "150km/s"},
+    #         "ch3cn": {"cubewidth": "150km/s"},
+    #         "h41a": {"cubewidth": "120km/s", "vlsr": "0km/s", "width": "2km/s"},
+    #         "n2hp": {"cubewidth": "60km/s"},
+    #     }
+    # }
+
+    # for field in line_parameters_custom:
+    #     for line in line_parameters_custom[field]:
+    #         line_parameters[field][line].update(line_parameters_custom[field][line])
