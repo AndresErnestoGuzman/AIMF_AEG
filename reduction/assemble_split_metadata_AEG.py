@@ -300,6 +300,25 @@ for sg in science_goals:
                 
                 contdat_files[field + band + muid] = 'notfound_' + ran_findcont
 
+            contFitfile = os.path.join(os.getenv('ALMAIMF_ROOTDIR'),
+                                    'contdat',
+                                    "{field}.{band}.{array}.contfit.dat".format(field=field, band=band,
+                                                                             array=arrayname))
+            if not os.path.exists(contFitfile):
+                contFitfile = os.path.join(os.getenv('ALMAIMF_ROOTDIR'),
+                                    'contdat',
+                                    "{field}.{band}.contfit.dat".format(field=field, band=band))
+
+            if os.path.exists(contFitfile):
+                contFitdatpath = os.path.realpath(contFitfile)
+                
+                if 'contfit.dat' in metadata[band][field]:
+                    metadata[band][field]['contfit.dat'][muid] = contFitdatpath
+                else:
+                    metadata[band][field]['contfit.dat'] = {muid: contFitdatpath}
+            else:
+                metadata[band][field]['contfit.dat'] = metadata[band][field]['cont.dat']
+
 
             # touch the filename
             with open(os.path.join(dirpath, "{0}_{1}_{2}".format(field, band, array_config)), 'w') as fh:

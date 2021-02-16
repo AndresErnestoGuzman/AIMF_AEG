@@ -19,7 +19,7 @@ dryRun = True
 
 # STAGE 1. PREAMBLE DEFINITIONS. Determination of array, antennae selection, et cetera.
 # Import of several packages.
-pre_preamble = set(globals())
+#pre_preamble = set(globals())
 import inspect
 src_file_path = inspect.getfile(lambda: None)
 execfile(os.path.join(os.path.dirname(src_file_path),"imaging_preamble.py"))

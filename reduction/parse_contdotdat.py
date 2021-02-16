@@ -20,7 +20,6 @@ def parse_contdotdat(filepath):
             if "LSRK" in line:
                 selections.append(line.split()[0])
 
-
     return ";".join(selections)
 
 def contchannels_to_linechannels(contsel, freqslist, return_fractions=False):
