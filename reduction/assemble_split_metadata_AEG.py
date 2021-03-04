@@ -201,10 +201,12 @@ for sg in science_goals:
             # Maximum widths to avoid bandwidth smearing
             targetwidth = 0.237 * antenna_diameters[array_config] * bands[band][0] * 1e9 / maximum_baseline
             widths = []
+            chmws = []
             logprint("Determining smoothing widths for continuum data. targetwidth is {0}".format(targetwidth))
             
             for spw in spws:
                 chwid = np.abs(np.mean(msmd.chanwidths(spw)))
+                chmws.append(chwid)
                 logprint("Channel width for spw {0} is {1}".format(spw,chwid))
                 wid = int(targetwidth/chwid)
                 if wid <= 0:
@@ -226,6 +228,11 @@ for sg in science_goals:
                     if len(divisors)>0:
                         wid = divisor.max()
                 widths.append(wid)
+            
+            if 'mean_chan_widths' in metadata[band][field]:
+                metadata[band][field]['mean_chan_widths'].append(chmws)
+            else:
+                metadata[band][field]['mean_chan_widths'] = [chmws]
 
             if 'continuum_widths_in_channels' in metadata[band][field]:
                 metadata[band][field]['continuum_widths_in_channels'].append(widths)

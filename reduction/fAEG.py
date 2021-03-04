@@ -1,9 +1,35 @@
-
 from metadata_tools import determine_imsize, determine_phasecenter, logprint, explodeKey
 import re, os, math, copy, numpy
-from taskinit import msmdtool, iatool, tbtool, mstool
+from taskinit import msmdtool, casalog, qatool, tbtool, mstool, iatool
 from tasks import tclean, exportfits, imstat, imhead, rmtables, split, delmod
 from utils import validate_mask_path
+
+
+def line_imaging_dict(chanwidth=None,fullwidth=None,restfreq=None,start=None,nchan=-1,cubeasymmetry=0.5,vlsrkms=0):
+    qa = qatool()
+    dd = {'nchan': nchan}
+    if chanwidth:
+        dd['width'] = chanwidth
+        chanWidth = qa.quantity(chanwidth)
+    if restfreq:
+        dd['restfreq'] = restfreq
+        restFreq = qa.quantity(restfreq)
+    if start:
+        dd['start'] = start
+        start = qa.quantity(start)
+    if fullwidth:
+        fullWidth = qa.quantity(fullwidth)
+        if not qa.getunit(fullWidth) == 'km/s':
+            raise Exception("Units!")
+        if restfreq:
+            start = qa.quantity((-1.0+cubeasymmetry)*qa.getvalue(fullWidth)+vlsrkms,'km/s')
+            dd['start'] = qa.tos(start)            
+            if chanwidth:
+                fullWidth = qa.convert(fullWidth,qa.getunit(chanwidth))
+                dd['nchan'] = int(qa.getvalue(qa.div(fullWidth,chanWidth)))
+            return dd
+
+    return dd
 
 
 def rms_from_mad(imagename):

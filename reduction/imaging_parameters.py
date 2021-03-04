@@ -153,7 +153,7 @@ if False:
             # 2 sigma threshold
             imaging_parameters[key]['threshold'] = {0:"{0:.2f}mJy".format(rms*1000*2)}
 
-if True:
+if False:
     sc_ip = copy.deepcopy(imaging_parameters)
     images = glob.glob("AIMF_AEG/reduction/clean_regions/*M_robust0.image.tt0_4.0sigma_*Jy")
     for mm in images:
