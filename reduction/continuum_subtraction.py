@@ -38,6 +38,6 @@ for band in bands:
 				uvcontsub(vis = lfile,
 						field = field,
 						fitspw = linechans,
-						fitorder=1,
+						fitorder = 1,
 						excludechans = True)
 			

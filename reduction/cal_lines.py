@@ -27,7 +27,7 @@ for band in bands:
 			ebs.add(uid)
 			caltables = []
 			allcaltables = []
-			allcaltables = glob.glob('_'.join(match.group('uid','field','band'))+"*.cal")
+			allcaltables = glob.glob('_'.join([uid,field,band])+"*.cal")
 			for cc in allcaltables:
 				if not 'bsens' in cc:
 					caltables.append(cc)
