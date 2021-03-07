@@ -21,7 +21,7 @@ for band in bands:
 			uid = vis.replace('.ms.split.cal','')
 			mous = path.split('/')[-2]
 			cont_sel = parse_contdotdat(mymd['contfit.dat'][mous])
-			for spw in spws:
+			for spw in [3]:#spws:
 				lfile = os.path.join(path,'_'.join([uid,field,band,'spw'+str(spw)])+'.split')
 				if os.path.exists(lfile):
 					ms.open(lfile)

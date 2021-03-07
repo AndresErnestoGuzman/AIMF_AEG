@@ -1,5 +1,4 @@
 from metadata_tools import determine_imsize, determine_phasecenter, logprint, explodeKey
-<<<<<<< HEAD
 import re, os, math, copy, numpy, shutil
 from taskinit import msmdtool, casalog, qatool, tbtool, mstool, iatool
 from tasks import tclean, exportfits, imstat, imhead, rmtables, split, delmod, imregrid
@@ -103,14 +102,6 @@ def create_clean_model(cubeimagename, contimagename, imaging_results_path, contm
     return cubeoutmodelpath
 
 
-=======
-import re, os, math, copy, numpy
-from taskinit import msmdtool, casalog, qatool, tbtool, mstool, iatool
-from tasks import tclean, exportfits, imstat, imhead, rmtables, split, delmod
-from utils import validate_mask_path
-
-
->>>>>>> 11f673b7240fdb1c219d2735823d607eda9e3018
 def line_imaging_dict(chanwidth=None,fullwidth=None,restfreq=None,start=None,nchan=-1,cubeasymmetry=0.5,vlsrkms=0):
     qa = qatool()
     dd = {'nchan': nchan}
