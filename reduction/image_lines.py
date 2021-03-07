@@ -1,12 +1,19 @@
 
+<<<<<<< HEAD
 dryRun = True
 onlyDirty = True
 continuum_subtracted = False
+=======
+dryRun = False
+onlyDirty = False
+continuum_subtracted = True
+>>>>>>> 11f673b7240fdb1c219d2735823d607eda9e3018
 parallel = True
 select_spws = {3}
 robusts = [0]
 
 fullwidth = '' # '300km/s'
+<<<<<<< HEAD
 lineFrequencies = {'H41a':'92034.43415MHz','H39an':'106737.35656MHz','H29a':'256302.03519MHz',
 					'H51b':'93607.31579MHz','H50b':'99225.20843MHz','H49b':'105301.85742MHz'}
 line = '' # 'H29a'
@@ -17,6 +24,17 @@ src_file_path = inspect.getfile(lambda: None)
 execfile(os.path.join(os.path.dirname(src_file_path),"imaging_preamble.py"))
 
 from fAEG import UniversalSet, rms_from_mad, line_imaging_dict, create_clean_model
+=======
+lineFrequencies = {'H29a':'256302.03519MHz'}
+line = '' # 'H29a'
+restfreq = lineFrequencies[line] if line else None
+
+import inspect
+src_file_path = inspect.getfile(lambda: None)
+execfile(os.path.join(os.path.dirname(src_file_path),"imaging_preamble.py"))
+
+from fAEG import UniversalSet, rms_from_mad, line_imaging_dict
+>>>>>>> 11f673b7240fdb1c219d2735823d607eda9e3018
 if not select_spws:
 	select_spws = UniversalSet()
 
@@ -33,6 +51,10 @@ suffix_cs = '.contsub' if continuum_subtracted else ''
 suffix_cs_ima = '' if continuum_subtracted else '_noCsub'
 
 
+<<<<<<< HEAD
+=======
+
+>>>>>>> 11f673b7240fdb1c219d2735823d607eda9e3018
 for band in bands:
 	for field in fields:
 		mymd = metadata[band][field]
@@ -99,7 +121,11 @@ for band in bands:
 					)
 					veloType = True if line else False
 					if parallel:
+<<<<<<< HEAD
 						for tipo in ["image","residual","mask"]:
+=======
+						for tipo in ["image","model","residual","mask"]:
+>>>>>>> 11f673b7240fdb1c219d2735823d607eda9e3018
 							ima = "{0}.{1}".format(imagename,tipo)
 							if os.path.exists(ima):
 								exportfits(imagename = ima,fitsimage=ima+".fits",overwrite=True, velocity=veloType)
@@ -114,7 +140,11 @@ else:
 		else: # Short
 			automasking_config_per_field[field] = {'sidelobethreshold':2.0,'noisethreshold':4.25,'minbeamfrac':0.3,'lownoisethreshold':1.5,'negativethreshold':15.0}
 
+<<<<<<< HEAD
 	
+=======
+	os.system("cp -r "+imagename+".image "+imagename+"_dirty.image")
+>>>>>>> 11f673b7240fdb1c219d2735823d607eda9e3018
 	for band in bands:
 		for field in fields:
 			mymd = metadata[band][field]
@@ -134,10 +164,13 @@ else:
 								antenna.append(vis_image_parameters[vv][arrayname+'_antennae'])
 				for robust in robusts:
 					imagename = os.path.join(imaging_root, "{0}_{1}_{2}_robust{3}_spw{4}{5}{6}".format(field,band,arrayname,robust,spw,suffix_cs_ima,line))
+<<<<<<< HEAD
 					try:
 						os.system("cp -r "+imagename+".image "+imagename+"_dirty.image")
 					except:
 						Exception("No dirty image.")
+=======
+>>>>>>> 11f673b7240fdb1c219d2735823d607eda9e3018
 
 					msmd.open(l_vises[0])
 					chw = np.mean(msmd.chanwidths(0))
@@ -162,6 +195,7 @@ else:
 								outframe = 'LSRK',chanchunks = -1,pblimit = 0.1,weighting = 'briggs',robust = robust,
 								niter = int(1e5), usemask = 'auto-multithresh',aumc=automasking_config_per_field[field],
 								rest=line_imaging_parameters),origin='image_lines_script')
+<<<<<<< HEAD
 					else:						
 						contimagename = (glob.glob(os.path.join(imaging_root,"{field}_{band}_{arrayname}_robust{robust}_selfcal*.image.tt0".
 							format(field=field,band=band,arrayname=arrayname,robust=robust))).sort())[-1]
@@ -172,6 +206,9 @@ else:
 								os.system("rm -rf "+imagename + ".model")
 							line_imaging_parameters['startmodel'] = startmodel
 
+=======
+					else:
+>>>>>>> 11f673b7240fdb1c219d2735823d607eda9e3018
 						line_imaging_parameters.update(automasking_config_per_field[field])	
 						tclean(vis = l_vises,
 							field = field,
