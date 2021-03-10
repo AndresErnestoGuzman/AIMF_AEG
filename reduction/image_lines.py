@@ -1,7 +1,7 @@
 
 dryRun = False
 onlyDirty = False
-continuum_subtracted = True
+continuum_subtracted = False
 parallel = True
 select_spws = {3}
 robusts = [0]
@@ -136,6 +136,7 @@ else:
 							if uid == vis_image_parameters[vv]['ebname']:
 								antenna.append(vis_image_parameters[vv][arrayname+'_antennae'])
 				for robust in robusts:
+
 					image_filename = "{0}_{1}_{2}_robust{3}_spw{4}{5}{6}".format(field,band,arrayname,robust,spw,suffix_cs_ima,line)
 					imagename = os.path.join(imaging_root, image_filename)
 

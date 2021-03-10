@@ -4,7 +4,6 @@ from taskinit import msmdtool, casalog, qatool, tbtool, mstool, iatool
 from tasks import tclean, exportfits, imstat, imhead, rmtables, split, delmod, imregrid
 from utils import validate_mask_path
 
-
 def create_clean_model(cubeimagename, contimagename, imaging_results_path='.', contmodel_path=None,nott1=False):
     
     ia = iatool()
