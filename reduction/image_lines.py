@@ -6,16 +6,20 @@ parallel = True
 select_spws = {3}
 robusts = [0]
 
-fullwidth = '' # '300km/s'
-lineFrequencies = {'H29a':'256302.03519MHz'}
-line = '' # 'H29a'
+fullwidth = '500km/s' # '450km/s'
+lineFrequencies = {	'H41a':'92034.43415MHz','H39a':'106737.35656MHz','H29a':'256302.03519MHz',
+					'H51b':'93607.31579MHz','H50b':'99225.20843MHz','H49b':'105301.85742MHz'}
+# for 2016.1.00732.S 
+# 'H41a' -> SPW1
+# 'H39a' -> SPW3
+line = 'H39a'
 restfreq = lineFrequencies[line] if line else None
 
-import inspect
+import inspect, glob
 src_file_path = inspect.getfile(lambda: None)
 execfile(os.path.join(os.path.dirname(src_file_path),"imaging_preamble.py"))
 
-from fAEG import UniversalSet, rms_from_mad, line_imaging_dict
+from fAEG import UniversalSet, rms_from_mad, line_imaging_dict, create_clean_model
 if not select_spws:
 	select_spws = UniversalSet()
 
@@ -30,8 +34,6 @@ if 'FIELD_ID' in os.environ:
 
 suffix_cs = '.contsub' if continuum_subtracted else ''
 suffix_cs_ima = '' if continuum_subtracted else '_noCsub'
-
-
 
 for band in bands:
 	for field in fields:
@@ -53,7 +55,7 @@ for band in bands:
 			for robust in robusts:
 				imagename = os.path.join(imaging_root, "{0}_{1}_{2}_robust{3}_spw{4}{5}{6}".format(field,band,arrayname,robust,spw,suffix_cs_ima,line))
 				
-				msmd.open(l_vises[0])
+				msmd.open(l_vises[0]) # Assume in l_vises all have compatible channel widths in l_vises
 				chw = np.mean(msmd.chanwidths(0))
 				mean_freq_spw = qa.quantity(msmd.meanfreq(0),"Hz")
 				msmd.close()
@@ -63,6 +65,7 @@ for band in bands:
 					chw_q = qa.convertdop(qa.div(qa.convert("{0}Hz".format(chw),'Hz'),mean_freq_spw),'km/s')
 
 				line_imaging_parameters = line_imaging_dict(chanwidth = qa.tos(chw_q),restfreq=restfreq,fullwidth=fullwidth)
+				sys.exit()
 				del line_imaging_parameters['width']
 				
 
@@ -99,7 +102,7 @@ for band in bands:
 					)
 					veloType = True if line else False
 					if parallel:
-						for tipo in ["image","model","residual","mask"]:
+						for tipo in ["image","residual","mask"]:
 							ima = "{0}.{1}".format(imagename,tipo)
 							if os.path.exists(ima):
 								exportfits(imagename = ima,fitsimage=ima+".fits",overwrite=True, velocity=veloType)
@@ -109,12 +112,12 @@ if onlyDirty:
 else:
 	automasking_config_per_field = {}
 	for field in fields:
-		if field == 'G301.14AB': # Long
+		if False:
 			automasking_config_per_field[field] = {'sidelobethreshold':2.0,'noisethreshold':5.00,'minbeamfrac':0.3,'lownoisethreshold':1.5,'negativethreshold':7.0}
 		else: # Short
 			automasking_config_per_field[field] = {'sidelobethreshold':2.0,'noisethreshold':4.25,'minbeamfrac':0.3,'lownoisethreshold':1.5,'negativethreshold':15.0}
 
-	os.system("cp -r "+imagename+".image "+imagename+"_dirty.image")
+	
 	for band in bands:
 		for field in fields:
 			mymd = metadata[band][field]
@@ -133,7 +136,13 @@ else:
 							if uid == vis_image_parameters[vv]['ebname']:
 								antenna.append(vis_image_parameters[vv][arrayname+'_antennae'])
 				for robust in robusts:
-					imagename = os.path.join(imaging_root, "{0}_{1}_{2}_robust{3}_spw{4}{5}{6}".format(field,band,arrayname,robust,spw,suffix_cs_ima,line))
+					image_filename = "{0}_{1}_{2}_robust{3}_spw{4}{5}{6}".format(field,band,arrayname,robust,spw,suffix_cs_ima,line)
+					imagename = os.path.join(imaging_root, image_filename)
+
+					try:
+						os.system("cp -r "+imagename+".image "+imagename+"_dirty.image")
+					except:
+						Exception("No dirty image.")
 
 					msmd.open(l_vises[0])
 					chw = np.mean(msmd.chanwidths(0))
@@ -158,7 +167,25 @@ else:
 								outframe = 'LSRK',chanchunks = -1,pblimit = 0.1,weighting = 'briggs',robust = robust,
 								niter = int(1e5), usemask = 'auto-multithresh',aumc=automasking_config_per_field[field],
 								rest=line_imaging_parameters),origin='image_lines_script')
-					else:
+					else:						
+						if not continuum_subtracted:
+							contimagename = sorted(glob.glob(os.path.join(imaging_root,"{field}_{band}_{arrayname}_robust{robust}_selfcal*.image.tt0".
+								format(field=field,band=band,arrayname=arrayname,robust=robust))))[-1]
+							
+							if os.path.exists(contimagename):
+								startmodel = create_clean_model(cubeimagename = imagename, contimagename = contimagename)
+								if os.path.exists(imagename + ".model"):
+									rmtables(imagename + ".model")
+									os.system("rm -rf "+imagename + ".model")
+
+								if parallel:
+									wd = os.path.join(imaging_root,image_filename + ".workdirectory")
+									if os.path.exists(wd):
+										rmtables(os.path.join(wd,image_filename +".n*.model"))
+										os.system("rm -rf "+os.path.join(wd,image_filename +"n*.model"))
+
+								line_imaging_parameters['startmodel'] = startmodel
+
 						line_imaging_parameters.update(automasking_config_per_field[field])	
 						tclean(vis = l_vises,
 							field = field,

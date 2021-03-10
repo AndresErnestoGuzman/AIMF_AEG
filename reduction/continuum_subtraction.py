@@ -34,7 +34,8 @@ for band in bands:
 				linechans = contchannels_to_linechannels(cont_sel, freqs)
 				lfile_csub = lfile+'.contsub'
 				if os.path.exists(lfile_csub):
-					logprint("File {0}. Overwriting.".format(lfile_csub))
+					(lfile_csub_path,lfile_csub_filename) = os.path.split(lfile_csub)
+					logprint("File {0}. Overwriting.".format(lfile_csub_filename))
 				uvcontsub(vis = lfile,
 						field = field,
 						fitspw = linechans,

@@ -29,7 +29,7 @@ to be done using the selfcal.ms file instead of the default continuum MS file.
 It is primarily for debug purposes and you shouldn't need it.
 """
 
-onlyDirtyImaging = True
+onlyDirtyImaging = False
 dryRun = False
 # PREAMBLE DEFINITIONS
 pre_preamble = set(globals())

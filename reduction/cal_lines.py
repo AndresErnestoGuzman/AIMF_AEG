@@ -32,7 +32,7 @@ for band in bands:
 				if not 'bsens' in cc:
 					caltables.append(cc)
 			caltables.sort()
-			for spw in spws:
+			for spw in [0]:#spws:
 				l_vis = os.path.join(path,'_'.join([uid,field,band,'spw'+str(spw)])+'.split')
 				clearcal(vis = l_vis)
 				applycal(vis = l_vis,
